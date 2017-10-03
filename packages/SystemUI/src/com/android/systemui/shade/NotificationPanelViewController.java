@@ -503,6 +503,8 @@ public final class NotificationPanelViewController implements Dumpable {
     private final NotificationShadeDepthController mDepthController;
     private final NavigationBarController mNavigationBarController;
     private final int mDisplayId;
+    private boolean mDoubleTapToSleepEnabled;
+    private GestureDetector mDoubleTapGesture;
 
     private GestureDetector mDoubleTapGestureListener;
     private boolean mDoubleTapSleepEnabled;
