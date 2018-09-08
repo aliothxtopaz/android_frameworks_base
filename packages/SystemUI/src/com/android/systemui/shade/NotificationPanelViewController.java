@@ -506,8 +506,10 @@ public final class NotificationPanelViewController implements Dumpable {
 
     private GestureDetector mDoubleTapGestureListener;
     private boolean mDoubleTapSleepEnabled;
+    private boolean mDoubleTapSleepLockscreenEnabled;
     private ContentObserver mHapticQsPulldownObserver;
     private ContentObserver mDoubleTapSleepObserver;
+    private ContentObserver mDoubleTapSleepLockscreenObserver;
 
     private final KeyguardIndicationController mKeyguardIndicationController;
     private int mHeadsUpInset;
@@ -922,6 +924,13 @@ public final class NotificationPanelViewController implements Dumpable {
             public void onChange(boolean selfChange) {
                 mDoubleTapSleepEnabled = Settings.System.getInt(doubleTapResolver,
                         Settings.System.DOUBLE_TAP_SLEEP_GESTURE, 1) != 0;
+            }
+        };
+        mDoubleTapSleepLockscreenObserver = new ContentObserver(handler) {
+            @Override
+            public void onChange(boolean selfChange) {
+                mDoubleTapSleepLockscreenEnabled = Settings.System.getInt(doubleTapResolver,
+                        Settings.System.DOUBLE_TAP_SLEEP_LOCKSCREEN, 0) != 0;
             }
         };
         mConversationNotificationManager = conversationNotificationManager;
@@ -4538,11 +4547,16 @@ public final class NotificationPanelViewController implements Dumpable {
                     Settings.System.HAPTIC_QS_PULLDOWN, 0) != 0;
             mDoubleTapSleepEnabled = Settings.System.getInt(mContentResolver,
                     Settings.System.DOUBLE_TAP_SLEEP_GESTURE, 1) != 0;
+            mDoubleTapSleepLockscreenEnabled = Settings.System.getInt(mContentResolver,
+                    Settings.System.DOUBLE_TAP_SLEEP_LOCKSCREEN, 0) != 0;
             mContentResolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.HAPTIC_QS_PULLDOWN), false, mHapticQsPulldownObserver);
             mContentResolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.DOUBLE_TAP_SLEEP_GESTURE), false,
                     mDoubleTapSleepObserver);
+            mContentResolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.DOUBLE_TAP_SLEEP_LOCKSCREEN), false,
+                    mDoubleTapSleepLockscreenObserver);
         }
 
         @Override
@@ -4550,6 +4564,7 @@ public final class NotificationPanelViewController implements Dumpable {
             mContentResolver.unregisterContentObserver(mSettingsChangeObserver);
             mContentResolver.unregisterContentObserver(mHapticQsPulldownObserver);
             mContentResolver.unregisterContentObserver(mDoubleTapSleepObserver);
+            mContentResolver.unregisterContentObserver(mDoubleTapSleepLockscreenObserver);
             mFragmentService.getFragmentHostManager(mView)
                     .removeTagListener(QS.TAG, mQsController.getQsFragmentListener());
             mStatusBarStateController.removeCallback(mStatusBarStateListener);
@@ -4875,10 +4890,13 @@ public final class NotificationPanelViewController implements Dumpable {
                 return false;
             }
 
-            if (mDoubleTapSleepEnabled && !mPulsing && !mDozing
-                    && (mBarState == StatusBarState.KEYGUARD
-                    || (!mQsController.getExpanded()
-                    && event.getY() < mStatusBarHeaderHeightKeyguard))) {
+            // The keyguard uses its own toggle; the status bar one only covers the
+            // top of the shade.
+            final boolean doubleTapToSleep = mBarState == StatusBarState.KEYGUARD
+                    ? mDoubleTapSleepLockscreenEnabled
+                    : !mQsController.getExpanded() && mDoubleTapSleepEnabled
+                            && event.getY() < mStatusBarHeaderHeightKeyguard;
+            if (doubleTapToSleep && !mPulsing && !mDozing) {
                 mDoubleTapGestureListener.onTouchEvent(event);
             }
 
