@@ -308,7 +308,7 @@ public class NetworkTraffic extends TextView {
         if (mIsEnabled) {
             if (mAttached) {
                 totalRxBytes = TrafficStats.getTotalRxBytes();
-                lastUpdateTime = SystemClock.elapsedRealtime();
+                totalTxBytes = TrafficStats.getTotalTxBytes();
                 mTrafficHandler.sendEmptyMessage(1);
             }
             return;
