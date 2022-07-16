@@ -185,6 +185,11 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
         // know that we're not falsing (because we unlocked.)
         mKeyguardMaxRefreshRate = context.getResources()
                 .getInteger(R.integer.config_keyguardMaxRefreshRate);
+
+        // Same as described above but limited to AOD
+        // Allows using a different rate for each
+        mAODMaxRefreshRate = context.getResources()
+                .getInteger(R.integer.config_aodMaxRefreshRate);
     }
 
     /**
