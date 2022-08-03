@@ -142,6 +142,7 @@ import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.util.AlphaTintDrawableWrapper;
 import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.RoundedCornerProgressDrawable;
+import com.android.systemui.Dependency;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
