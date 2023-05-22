@@ -107,7 +107,7 @@ class PrivacyEvent(override val showAnimation: Boolean = true) : StatusEvent {
     }
 
     override fun shouldUpdateFromEvent(other: StatusEvent?): Boolean {
-        return other is PrivacyEvent && other.forceVisible && !forceVisible
+        return other is PrivacyEvent
     }
 
     override fun updateFromEvent(other: StatusEvent?) {
