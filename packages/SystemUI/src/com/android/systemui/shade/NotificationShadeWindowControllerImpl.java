@@ -100,6 +100,7 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
     private final long mLockScreenDisplayTimeout;
     private final float mKeyguardPreferredRefreshRate; // takes precedence over max
     private final float mKeyguardMaxRefreshRate;
+    private final float mAODMaxRefreshRate;
     private final KeyguardViewMediator mKeyguardViewMediator;
     private final KeyguardBypassController mKeyguardBypassController;
     private final AuthController mAuthController;
@@ -343,7 +344,10 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
             boolean bypassOnKeyguard = mKeyguardBypassController.getBypassEnabled()
                     && state.statusBarState == StatusBarState.KEYGUARD
                     && !state.keyguardFadingAway && !state.keyguardGoingAway;
-            if (state.dozing || bypassOnKeyguard) {
+            if (state.dozing) {
+                mLpChanged.preferredMaxDisplayRefreshRate = mAODMaxRefreshRate > 0
+                        ? mAODMaxRefreshRate : mKeyguardMaxRefreshRate;
+            } else if (bypassOnKeyguard) {
                 mLpChanged.preferredMaxDisplayRefreshRate = mKeyguardMaxRefreshRate;
             } else {
                 mLpChanged.preferredMaxDisplayRefreshRate = 0;
@@ -843,6 +847,7 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
     public void dump(PrintWriter pw, String[] args) {
         pw.println(TAG + ":");
         pw.println("  mKeyguardMaxRefreshRate=" + mKeyguardMaxRefreshRate);
+        pw.println("  mAODMaxRefreshRate=" + mAODMaxRefreshRate);
         pw.println("  mKeyguardPreferredRefreshRate=" + mKeyguardPreferredRefreshRate);
         pw.println("  mDeferWindowLayoutParams=" + mDeferWindowLayoutParams);
         pw.println(mCurrentState);
