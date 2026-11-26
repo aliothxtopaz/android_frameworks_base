@@ -17,4 +17,9 @@
 PRODUCT_PACKAGES := \
     DroidSansMono.ttf \
     AndroidClock.ttf \
-    fonts.xml
+    fonts.xml \
+    JetBrainsMono-Regular.ttf \
+    JetBrainsMono-Italic.ttf \
+    JetBrainsMono-Medium.ttf \
+    JetBrainsMono-Bold.ttf \
+    JetBrainsMono-BoldItalic.ttf
