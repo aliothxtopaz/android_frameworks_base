@@ -109,6 +109,7 @@ public class SecureSettings {
         Settings.Secure.DOZE_ENABLED,
         Settings.Secure.DOZE_ALWAYS_ON,
         Settings.Secure.DOZE_FOR_NOTIFICATIONS,
+        Settings.Secure.DOZE_ON_CHARGE,
         Settings.Secure.DOZE_PICK_UP_GESTURE,
         Settings.Secure.DOZE_DOUBLE_TAP_GESTURE,
         Settings.Secure.DOZE_TAP_SCREEN_GESTURE,

@@ -9151,6 +9151,16 @@ public final class Settings {
         public static final String DOZE_ALWAYS_ON = "doze_always_on";
 
         /**
+         * Whether to enable Always-on-Display only when the device is charging.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        @Readable
+        public static final String DOZE_ON_CHARGE = "doze_on_charge";
+
+        /**
          * Whether the device should pulse on pick up gesture.
          * @hide
          */
