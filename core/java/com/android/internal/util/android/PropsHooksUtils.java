@@ -54,7 +54,8 @@ public class PropsHooksUtils {
 
     private static final String[] PIHOOK_KEYS = {
             "BRAND", "DEVICE", "MANUFACTURER", "MODEL", "PRODUCT", "FINGERPRINT",
-            "ID", "HARDWARE", "SECURITY_PATCH", "DEVICE_INITIAL_SDK_INT"
+            "ID", "HARDWARE", "RELEASE", "SECURITY_PATCH", "DEVICE_INITIAL_SDK_INT",
+            "SDK_INT", "TAGS", "TYPE"
     };
 
     private static volatile boolean sIsPhotos;
@@ -201,10 +202,8 @@ public class PropsHooksUtils {
         final String processName = Application.getProcessName();
         if (TextUtils.isEmpty(processName)) return;
 
-        boolean isTablet = isLargeScreen(context);
-
         if (pubgPropsMap.containsKey(packageName)) {
-            Map<String, Object> propsToApply = isTablet
+            Map<String, Object> propsToApply = isLargeScreen(context)
                     ? pubgPropsMap.get(packageName).get("tablet")
                     : pubgPropsMap.get(packageName).get("phone");
             if (propsToApply != null) packagePropsMap.put(packageName, propsToApply);
@@ -334,11 +333,17 @@ public class PropsHooksUtils {
     }
 
     private static boolean isLargeScreen(Context context) {
-        WindowManager windowManager = context.getSystemService(WindowManager.class);
-        final Rect bounds = windowManager.getMaximumWindowMetrics().getBounds();
-        float smallestWidth = dpiFromPx(Math.min(bounds.width(), bounds.height()),
-                context.getResources().getConfiguration().densityDpi);
-        return smallestWidth >= 600;
+        try {
+            WindowManager windowManager = context.getSystemService(WindowManager.class);
+            if (windowManager == null) return false;
+            final Rect bounds = windowManager.getMaximumWindowMetrics().getBounds();
+            float smallestWidth = dpiFromPx(Math.min(bounds.width(), bounds.height()),
+                    context.getResources().getConfiguration().densityDpi);
+            return smallestWidth >= 600;
+        } catch (Exception e) {
+            // Child/sandboxed zygotes have no WindowManager yet.
+            return false;
+        }
     }
 
     private static float dpiFromPx(float size, int densityDpi) {

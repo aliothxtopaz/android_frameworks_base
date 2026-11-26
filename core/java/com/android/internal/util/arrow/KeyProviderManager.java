@@ -140,7 +140,14 @@ public final class KeyProviderManager {
         }
 
         private void loadFromConfigArray(Context ctx) {
-            for (String entry : ctx.getResources().getStringArray(R.array.config_certifiedKeybox)) {
+            final String[] entries =
+                    ctx.getResources().getStringArray(R.array.config_certifiedKeybox);
+            if (entries.length == 0) {
+                // No keybox shipped in the overlay; the user has not picked one either.
+                return;
+            }
+
+            for (String entry : entries) {
                 String[] parts = entry.split(":", 2);
                 if (parts.length == 2) {
                     keyboxData.put(parts[0], parts[1]);
