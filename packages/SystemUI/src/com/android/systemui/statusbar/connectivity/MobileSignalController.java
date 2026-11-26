@@ -33,6 +33,7 @@ import android.database.ContentObserver;
 import android.net.NetworkCapabilities;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.provider.Settings.Global;
 import android.telephony.AccessNetworkConstants;
 import android.telephony.CellSignalStrength;
@@ -91,6 +92,10 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
     private final TelephonyManager mPhone;
     private final CarrierConfigTracker mCarrierConfigTracker;
     private final ImsMmTelManager mImsMmTelManager;
+
+    /** User toggles: show 4G instead of LTE, and hide/show the data-disabled icon. */
+    private boolean mShowFourGIcon;
+    private boolean mShowDataDisabledIcon;
     private final SubscriptionDefaults mDefaults;
     private final MobileMappingsProxy mMobileMappingsProxy;
     private final String mNetworkNameDefault;
@@ -207,6 +212,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
 
         mNetworkToIconLookup = mMobileMappingsProxy.mapIconSets(mConfig);
         mDefaultIcons = mMobileMappingsProxy.getDefaultIcons(mConfig);
+        updateUserToggles();
 
         String networkName = info.getCarrierName() != null ? info.getCarrierName().toString()
                 : mNetworkNameDefault;
@@ -272,6 +278,10 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         mContext.getContentResolver().registerContentObserver(Global.getUriFor(
                 Global.DATA_ROAMING + mSubscriptionInfo.getSubscriptionId()),
                 true, mObserver);
+        mContext.getContentResolver().registerContentObserver(
+                Settings.Secure.getUriFor("show_fourg_icon"), false, mObserver);
+        mContext.getContentResolver().registerContentObserver(
+                Settings.Secure.getUriFor("data_disabled_icon"), false, mObserver);
         mContext.registerReceiver(mVolteSwitchObserver,
                 new IntentFilter("org.codeaurora.intent.action.ACTION_ENHANCE_4G_SWITCH"));
         if (mConfig.showVolteIcon || mConfig.showVowifiIcon) {
@@ -294,6 +304,13 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         if (mConfig.showVolteIcon || mConfig.showVowifiIcon) {
             mImsMmTelManager.unregisterImsStateCallback(mImsStateCallback);
         }
+    }
+
+    private void updateUserToggles() {
+        mShowFourGIcon = Settings.Secure.getInt(mContext.getContentResolver(),
+                "show_fourg_icon", 0) == 1;
+        mShowDataDisabledIcon = Settings.Secure.getInt(mContext.getContentResolver(),
+                "data_disabled_icon", 1) == 1;
     }
 
     private void updateInflateSignalStrength() {
@@ -658,6 +675,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             }
         }
 
+        updateUserToggles();
         mCurrentState.setCarrierId(mPhone.getSimCarrierId());
         String iconKey = mMobileMappingsProxy.getIconKey(mCurrentState.telephonyDisplayInfo);
         //Modem has centralized logic to display 5G icon based on carrier requirements
@@ -670,12 +688,23 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             mCurrentState.iconGroup = mDefaultIcons;
         }
 
+        if (mShowFourGIcon && mCurrentState.iconGroup != null) {
+            String iconGroupName = mCurrentState.iconGroup.name;
+            if ("LTE".equals(iconGroupName)) {
+                mCurrentState.iconGroup = TelephonyIcons.FOUR_G;
+            } else if ("LTE+".equals(iconGroupName)) {
+                mCurrentState.iconGroup = TelephonyIcons.FOUR_G_PLUS;
+            } else if ("4G LTE".equals(iconGroupName)) {
+                mCurrentState.iconGroup = TelephonyIcons.FOUR_G;
+            }
+        }
+
         mCurrentState.dataConnected = mCurrentState.isDataConnected();
 
         mCurrentState.roaming = isRoaming();
         if (isCarrierNetworkChangeActive()) {
             mCurrentState.iconGroup = TelephonyIcons.CARRIER_NETWORK_CHANGE;
-        } else if (isDataDisabled() && !mConfig.alwaysShowDataRatIcon) {
+        } else if (isDataDisabled() && !mConfig.alwaysShowDataRatIcon && mShowDataDisabledIcon) {
             if (mSubscriptionInfo.getSubscriptionId() != mDefaults.getDefaultDataSubId()) {
                 mCurrentState.iconGroup = TelephonyIcons.NOT_DEFAULT_DATA;
             } else {

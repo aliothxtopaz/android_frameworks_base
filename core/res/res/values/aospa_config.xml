@@ -102,6 +102,11 @@
     <!-- Build fingerprint from stock ROM -->
     <string name="config_stockFingerprint" translatable="false"></string>
 
+    <!-- Keybox data (EC.PRIV, EC.CERT_n, RSA.PRIV, RSA.CERT_n) used for key attestation
+         spoofing. Entries are "KEY:value" pairs; empty means no built-in keybox. -->
+    <string-array name="config_certifiedKeybox" translatable="false">
+    </string-array>
+
     <!-- Device model (Build.MODEL) to spoof for netflix, if not empty -->
     <string name="config_netflixSpoofModel" translatable="false"></string>
 

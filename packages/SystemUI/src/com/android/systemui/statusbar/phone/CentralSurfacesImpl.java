@@ -242,6 +242,7 @@ import com.android.systemui.statusbar.window.StatusBarWindowController;
 import com.android.systemui.statusbar.window.StatusBarWindowStateController;
 import com.android.systemui.surfaceeffects.ripple.RippleShader.RippleShape;
 import com.android.systemui.util.DumpUtilsKt;
+import com.android.systemui.statusbar.policy.GameSpaceManager;
 import com.android.systemui.util.WallpaperController;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.concurrency.MessageRouter;
@@ -286,6 +287,9 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
 
     private static final int MSG_OPEN_SETTINGS_PANEL = 1002;
     private static final int MSG_LAUNCH_TRANSITION_TIMEOUT = 1003;
+    // 1020-1040 reserved for BaseStatusBar
+
+    protected GameSpaceManager mGameSpaceManager;
     // 1020-1040 reserved for BaseStatusBar
 
     /**
@@ -877,6 +881,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
 
         mActivityIntentHelper = new ActivityIntentHelper(mContext);
         mActivityLaunchAnimator = activityLaunchAnimator;
+        mGameSpaceManager = new GameSpaceManager(mContext, mKeyguardStateController);
 
         // The status bar background may need updating when the ongoing call status changes.
         mOngoingCallController.addCallback((animate) -> maybeUpdateBarMode());
@@ -1509,6 +1514,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
         filter.addAction(Intent.ACTION_SCREEN_OFF);
         mBroadcastDispatcher.registerReceiver(mBroadcastReceiver, filter, null, UserHandle.ALL);
+        mGameSpaceManager.observe();
     }
 
     protected QS createDefaultQSFragment() {
@@ -4152,6 +4158,11 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     }
 
     // End Extra BaseStatusBarMethods.
+
+    @Override
+    public GameSpaceManager getGameSpaceManager() {
+        return mGameSpaceManager;
+    }
 
     boolean isTransientShown() {
         return mTransientShown;

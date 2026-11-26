@@ -344,6 +344,9 @@
 
     <protected-broadcast android:name="android.net.nsd.STATE_CHANGED" />
 
+    <!-- To broadcast status of the GameSpaceManager -->
+    <uses-permission android:name="android.permission.MANAGE_GAME_MODE" />
+
     <!-- For OMAPI -->
     <protected-broadcast android:name="android.se.omapi.action.SECURE_ELEMENT_STATE_CHANGED" />
 

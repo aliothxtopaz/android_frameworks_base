@@ -31,6 +31,9 @@ import android.system.keystore2.KeyEntryResponse;
 import android.system.keystore2.ResponseCode;
 import android.util.Log;
 
+import com.android.internal.util.arrow.KeyboxImitationHooks;
+import com.android.internal.util.arrow.KeyboxUtils;
+
 import java.util.Calendar;
 
 /**
@@ -249,6 +252,11 @@ public class KeyStore2 {
      */
     public KeyEntryResponse getKeyEntry(@NonNull KeyDescriptor descriptor)
             throws KeyStoreException {
+        KeyEntryResponse response = KeyboxImitationHooks.onGetKeyEntry(descriptor);
+        if (response != null) {
+            return response;
+        }
+
         return handleRemoteExceptionWithRetry((service) -> service.getKeyEntry(descriptor));
     }
 
@@ -295,6 +303,8 @@ public class KeyStore2 {
      */
     public void deleteKey(@NonNull KeyDescriptor descriptor)
             throws KeyStoreException {
+        KeyboxUtils.remove(android.os.Binder.getCallingUid(), descriptor.alias);
+
         handleRemoteExceptionWithRetry((service) -> {
             service.deleteKey(descriptor);
             return 0;

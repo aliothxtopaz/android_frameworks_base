@@ -5195,6 +5195,21 @@ public final class Settings {
         public static final String ACCELEROMETER_ROTATION = "accelerometer_rotation";
 
         /**
+         * GameSpace: List of added games by user
+         * @hide
+         */
+        @Readable
+        public static final String GAMESPACE_GAME_LIST = "gamespace_game_list";
+
+        /**
+         * GameSpace: Whether fullscreen intent will be suppressed while in game session
+         * @hide
+         */
+        @Readable
+        public static final String GAMESPACE_SUPPRESS_FULLSCREEN_INTENT =
+                "gamespace_suppress_fullscreen_intent";
+
+        /**
          * Default screen rotation when no other policy applies.
          * When {@link #ACCELEROMETER_ROTATION} is zero and no on-screen Activity expresses a
          * preference, this rotation value will be used. Must be one of the
@@ -9159,6 +9174,36 @@ public final class Settings {
          */
         @Readable
         public static final String DOZE_ON_CHARGE = "doze_on_charge";
+
+        /**
+         * User selectable keybox data used for key attestation spoofing.
+         * @hide
+         */
+        @Readable
+        public static final String KEYBOX_DATA = "keybox_data";
+
+        /**
+         * Our GameSpace can't write to device_config directly [GTS]
+         * Use this as intermediate to pass device_config property
+         * from our GameSpace to com.android.server.app.GameManagerService
+         * so we can set the device_config property from there.
+         * @hide
+         */
+        public static final String GAME_OVERLAY = "game_overlay";
+
+        /**
+         * Verified boot key used when generating spoofed attestation certificates.
+         * @hide
+         */
+        @Readable
+        public static final String VBOOT_KEY = "vboot_key";
+
+        /**
+         * Verified boot hash used when generating spoofed attestation certificates.
+         * @hide
+         */
+        @Readable
+        public static final String VBOOT_HASH = "vboot_hash";
 
         /**
          * Whether the device should pulse on pick up gesture.
