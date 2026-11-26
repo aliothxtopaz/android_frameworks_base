@@ -69,6 +69,9 @@ public class PowerOffAlarmService extends SystemService {
         super(context);
         mContext = context;
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
+        mNotificationManager = (NotificationManager) mContext.getSystemService(
+                Context.NOTIFICATION_SERVICE);
+        setupNotification();
     }
 
     @Override
@@ -100,9 +103,6 @@ public class PowerOffAlarmService extends SystemService {
         if (phase != SystemService.PHASE_BOOT_COMPLETED || !mIsAvailable)
             return;
         Slog.v(TAG, "onBootPhase PHASE_BOOT_COMPLETED");
-        mNotificationManager = (NotificationManager) mContext.getSystemService(
-                Context.NOTIFICATION_SERVICE);
-        setupNotification();
         updateAlarms(mAlarmManager);
     }
 
@@ -162,6 +162,7 @@ public class PowerOffAlarmService extends SystemService {
     }
 
     private synchronized void updateNotification(boolean isSet) {
+        if (mNotificationManager == null || mNotification == null) return;
         mNotificationManager.cancel(NOTIFICATION_ID);
         if (!isSet) return;
         mNotificationManager.notify(NOTIFICATION_ID, mNotification);
