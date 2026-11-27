@@ -15,7 +15,6 @@ import org.xmlpull.v1.XmlPullParser;
 
 import java.io.StringReader;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -127,7 +126,7 @@ public final class KeyProviderManager {
                 }
 
                 if (!hasKeybox()) {
-                    Log.w(TAG, "Failed to load keybox from XML setting");
+                    Log.w(TAG, "Failed to load keybox from XML setting, parsed entries: " + keyboxData.keySet());
                     return false;
                 }
 
@@ -170,13 +169,12 @@ public final class KeyProviderManager {
 
         @Override
         public boolean hasKeybox() {
-            if (!keyboxData.containsKey("EC.PRIV") || !keyboxData.containsKey("RSA.PRIV")) {
-                return false;
-            }
-            if (!keyboxData.containsKey("EC.CERT_1") || !keyboxData.containsKey("RSA.CERT_1")) {
-                return false;
-            }
-            return true;
+            // A keybox only has to cover one algorithm; most current ones ship EC only.
+            final boolean hasEc = keyboxData.containsKey("EC.PRIV")
+                    && keyboxData.containsKey("EC.CERT_1");
+            final boolean hasRsa = keyboxData.containsKey("RSA.PRIV")
+                    && keyboxData.containsKey("RSA.CERT_1");
+            return hasEc || hasRsa;
         }
 
         @Override
@@ -200,15 +198,14 @@ public final class KeyProviderManager {
         }
 
         private String[] getCertificateChain(String prefix) {
+            // Keep the order the certificates appear in the keybox, it is the chain order.
             List<String> dataList = new ArrayList<>();
-            for (String key : keyboxData.keySet()) {
-                if (key.startsWith(prefix + ".CERT_")) {
-                    dataList.add(keyboxData.get(key));
-                }
+            for (int i = 1; ; i++) {
+                String cert = keyboxData.get(prefix + ".CERT_" + i);
+                if (cert == null) break;
+                dataList.add(cert);
             }
-            String[] chain = dataList.toArray(new String[0]);
-            Arrays.sort(chain);
-            return chain;
+            return dataList.toArray(new String[0]);
         }
     }
 }

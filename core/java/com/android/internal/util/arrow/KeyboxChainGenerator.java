@@ -55,6 +55,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
+import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.security.Security;
 import java.security.cert.Certificate;
@@ -99,12 +100,16 @@ public final class KeyboxChainGenerator {
                 return null;
             }
 
+            final String keyboxAlgorithm = Objects.equals(params.algorithm, Algorithm.EC)
+                    ? KeyProperties.KEY_ALGORITHM_EC
+                    : KeyProperties.KEY_ALGORITHM_RSA;
+            X509CertificateHolder issuer = KeyboxUtils.getCertificateHolder(keyboxAlgorithm);
+            if (issuer == null) {
+                dlog("Keybox has no " + keyboxAlgorithm + " key, not spoofing");
+                return null;
+            }
             X509v3CertificateBuilder certBuilder = new X509v3CertificateBuilder(
-                    KeyboxUtils.getCertificateHolder(
-                            Objects.equals(params.algorithm, Algorithm.EC)
-                                    ? KeyProperties.KEY_ALGORITHM_EC
-                                    : KeyProperties.KEY_ALGORITHM_RSA
-                    ).getSubject(),
+                    issuer.getSubject(),
                     params.certificateSerial,
                     new Time(params.certificateNotBefore),
                     new Time(params.certificateNotAfter),
@@ -118,15 +123,20 @@ public final class KeyboxChainGenerator {
             certBuilder.addExtension(Extension.keyUsage, true, keyUsage);
             certBuilder.addExtension(createExtension(params, uid));
 
-            ContentSigner contentSigner;
-            if (Objects.equals(params.algorithm, Algorithm.EC)) {
-                contentSigner = new JcaContentSignerBuilder("SHA256withECDSA").build(KeyboxUtils.getPrivateKey(KeyProperties.KEY_ALGORITHM_EC));
-            } else {
-                contentSigner = new JcaContentSignerBuilder("SHA256withRSA").build(KeyboxUtils.getPrivateKey(KeyProperties.KEY_ALGORITHM_RSA));
+            PrivateKey signingKey = KeyboxUtils.getPrivateKey(keyboxAlgorithm);
+            if (signingKey == null) {
+                dlog("Keybox has no " + keyboxAlgorithm + " private key, not spoofing");
+                return null;
             }
+            ContentSigner contentSigner = Objects.equals(params.algorithm, Algorithm.EC)
+                    ? new JcaContentSignerBuilder("SHA256withECDSA").build(signingKey)
+                    : new JcaContentSignerBuilder("SHA256withRSA").build(signingKey);
             X509CertificateHolder certHolder = certBuilder.build(contentSigner);
             Certificate leaf = KeyboxUtils.getCertificateFromHolder(certHolder);
-            List<Certificate> chain = KeyboxUtils.getCertificateChain(leaf.getPublicKey().getAlgorithm());
+            List<Certificate> chain = KeyboxUtils.getCertificateChain(keyboxAlgorithm);
+            if (chain == null) {
+                return null;
+            }
             chain.add(0, leaf);
             dlog("Successfully generated X500 Cert for alias: " + descriptor.alias);
             return chain;

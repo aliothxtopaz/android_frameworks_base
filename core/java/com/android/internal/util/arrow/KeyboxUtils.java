@@ -117,6 +117,10 @@ public class KeyboxUtils {
                 ? provider.getEcCertificateChain()
                 : provider.getRsaCertificateChain();
 
+        if (certChainPem == null || certChainPem.length == 0) {
+            return null;
+        }
+
         CertificateFactory factory = CertificateFactory.getInstance("X.509");
         List<Certificate> certs = new ArrayList<>();
 
@@ -152,14 +156,24 @@ public class KeyboxUtils {
                 ? provider.getEcPrivateKey()
                 : provider.getRsaPrivateKey();
 
+        if (privateKeyEncoded == null) {
+            return null;
+        }
+
         return parsePrivateKey(privateKeyEncoded, algorithm);
     }
 
     public static X509CertificateHolder getCertificateHolder(String algorithm) throws Exception {
         IKeyboxProvider provider = KeyProviderManager.getProvider();
-        String certPem = KeyProperties.KEY_ALGORITHM_EC.equals(algorithm)
-                ? provider.getEcCertificateChain()[0]
-                : provider.getRsaCertificateChain()[0];
+        String[] certChainPem = KeyProperties.KEY_ALGORITHM_EC.equals(algorithm)
+                ? provider.getEcCertificateChain()
+                : provider.getRsaCertificateChain();
+
+        if (certChainPem == null || certChainPem.length == 0) {
+            return null;
+        }
+
+        String certPem = certChainPem[0];
 
         X509Certificate parsedCert = parseCertificate(certPem);
         return new X509CertificateHolder(parsedCert.getEncoded());
