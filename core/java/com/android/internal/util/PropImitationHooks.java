@@ -27,6 +27,7 @@ import android.content.res.Resources;
 import android.os.Build;
 import android.os.Binder;
 import android.os.Process;
+import android.os.SystemProperties;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -145,12 +146,17 @@ public class PropImitationHooks {
             }
         };
         if (!was) {
-            dlog("Spoofing build for GMS");
-            for (String entry : sCertifiedProps) {
-                final int split = entry.indexOf(':');
-                if (split <= 0 || split == entry.length() - 1) continue;
-                setPropValue(entry.substring(0, split).trim(),
-                        entry.substring(split + 1).trim());
+            // A PIF JSON picked in Settings takes precedence over the built-in list.
+            if (!SystemProperties.get("persist.sys.pihooks_FINGERPRINT", "").isEmpty()) {
+                dlog("User PIF applied, skipping certified props");
+            } else {
+                dlog("Spoofing build for GMS");
+                for (String entry : sCertifiedProps) {
+                    final int split = entry.indexOf(':');
+                    if (split <= 0 || split == entry.length() - 1) continue;
+                    setPropValue(entry.substring(0, split).trim(),
+                            entry.substring(split + 1).trim());
+                }
             }
         } else {
             dlog("Skip spoofing build for GMS, because GmsAddAccountActivityOnTop");
