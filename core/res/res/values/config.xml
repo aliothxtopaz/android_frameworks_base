@@ -4532,6 +4532,9 @@
     <!-- Name of the font family to use in the default lockscreen clock -->
     <string name="config_clockFontFamily" translatable="false">monospace</string>
 
+    <!-- Font family for the status bar clock; font overlays can set this to a regular weight -->
+    <string name="config_statusBarClockFontFamily" translatable="false">@string/config_headlineFontFamilyMedium</string>
+
     <!-- Size of icon shown beside a preference locked by admin -->
     <dimen name="config_restrictedIconSize">@dimen/restricted_icon_size_material</dimen>
 

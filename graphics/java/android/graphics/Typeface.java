@@ -1402,7 +1402,11 @@ public class Typeface {
             sSystemFontOverrides.put("sans-serif", typeface);
             sSystemFontOverrides.put("sans-serif-thin", create(typeface, 100, false));
             sSystemFontOverrides.put("sans-serif-light", create(typeface, 300, false));
-            sSystemFontOverrides.put("sans-serif-medium", create(typeface, 500, false));
+            // Let each font overlay pick its own "medium" weight (Volte Round uses Semibold).
+            Typeface medium = sSystemFontMap.get(res.getString(
+                    com.android.internal.R.string.config_bodyFontFamilyMedium));
+            sSystemFontOverrides.put("sans-serif-medium", medium != null
+                    ? medium : create(typeface, 500, false));
             sSystemFontOverrides.put("sans-serif-black", create(typeface, 900, false));
 
             setPublicDefaults(familyName);
