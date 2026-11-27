@@ -157,6 +157,8 @@ public class PropImitationHooks {
                     setPropValue(entry.substring(0, split).trim(),
                             entry.substring(split + 1).trim());
                 }
+                Log.i(TAG, "Spoofed GMS build: " + Build.FINGERPRINT
+                        + " model=" + Build.MODEL);
             }
         } else {
             dlog("Skip spoofing build for GMS, because GmsAddAccountActivityOnTop");

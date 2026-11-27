@@ -22,6 +22,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
 import android.service.quicksettings.Tile;
+import android.util.Slog;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -54,6 +55,7 @@ public class FlashlightTile extends QSTileImpl<BooleanState> implements
         FlashlightController.FlashlightListener {
 
     public static final String TILE_SPEC = "flashlight";
+    private static final String TAG = "FlashlightTile";
     private final FlashlightController mFlashlightController;
 
     @Inject
@@ -117,13 +119,20 @@ public class FlashlightTile extends QSTileImpl<BooleanState> implements
 
     @Override
     protected void handleLongClick(@Nullable View view) {
-        // Long press opens the brightness slider while the torch is on and the
-        // device supports torch strength control, otherwise keep the old toggle.
-        if (!mState.value || !mFlashlightController.supportsStrengthControl()) {
+        if (!mFlashlightController.supportsStrengthControl()) {
+            Slog.i(TAG, "Long press: no strength control, toggling");
             handleClick(view);
             return;
         }
-        showStrengthDialog();
+        Slog.i(TAG, "Long press: opening strength dialog, on=" + mState.value
+                + " level=" + mFlashlightController.getStrength()
+                + "/" + mFlashlightController.getMaxStrength());
+        if (!mState.value) {
+            mFlashlightController.setFlashlight(true);
+            mHandler.postDelayed(this::showStrengthDialog, 350);
+        } else {
+            showStrengthDialog();
+        }
     }
 
     private void showStrengthDialog() {

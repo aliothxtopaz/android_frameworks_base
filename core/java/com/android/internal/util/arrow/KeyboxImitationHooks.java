@@ -42,7 +42,8 @@ public class KeyboxImitationHooks {
 
         KeyEntryResponse spoofed = KeyboxUtils.retrieve(Binder.getCallingUid(), descriptor.alias);
         if (spoofed != null) {
-            dlog("Key entry spoofed");
+            Log.i(TAG, "Replaced key entry for " + descriptor.alias
+                    + " uid=" + Binder.getCallingUid());
             return spoofed;
         }
 
@@ -84,6 +85,7 @@ public class KeyboxImitationHooks {
                 return null;
             }
             KeyboxUtils.append(uid, descriptor.alias, response);
+            Log.i(TAG, "Spoofed attestation for " + descriptor.alias + " uid=" + uid);
             return response.metadata;
         } catch (Exception e) {
             Log.e(TAG, "Failed to generate key", e);
