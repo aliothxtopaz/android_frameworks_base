@@ -85,7 +85,8 @@ public class KeyboxImitationHooks {
                 return null;
             }
             KeyboxUtils.append(uid, descriptor.alias, response);
-            Log.i(TAG, "Spoofed attestation for " + descriptor.alias + " uid=" + uid);
+            Log.i(TAG, "Spoofed attestation for " + descriptor.alias + " uid=" + uid
+                    + " os=" + params.osVersion + " patch=" + params.osPatchLevel);
             return response.metadata;
         } catch (Exception e) {
             Log.e(TAG, "Failed to generate key", e);

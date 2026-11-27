@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
+import android.content.res.Resources;
 import android.hardware.security.keymint.Algorithm;
 import android.hardware.security.keymint.EcCurve;
 import android.hardware.security.keymint.KeyOrigin;
@@ -17,6 +18,7 @@ import android.hardware.security.keymint.KeyParameter;
 import android.hardware.security.keymint.Tag;
 import android.os.Binder;
 import android.os.Build;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.security.keystore.KeyProperties;
@@ -64,6 +66,7 @@ import java.security.spec.RSAKeyGenParameterSpec;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -225,13 +228,14 @@ public final class KeyboxChainGenerator {
 
             ASN1Encodable[] teeEnforcedEncodables;
 
-            // Support device properties attestation
+            // Support device properties attestation. The requested IDs describe the real
+            // device (this runs in system_server), so replace them with the spoofed profile.
             if (params.brand != null) {
-                var Abrand = new DEROctetString(params.brand);
-                var Adevice = new DEROctetString(params.device);
-                var Aproduct = new DEROctetString(params.product);
-                var Amanufacturer = new DEROctetString(params.manufacturer);
-                var Amodel = new DEROctetString(params.model);
+                var Abrand = new DEROctetString(idValue(params.brand, "BRAND"));
+                var Adevice = new DEROctetString(idValue(params.device, "DEVICE"));
+                var Aproduct = new DEROctetString(idValue(params.product, "PRODUCT"));
+                var Amanufacturer = new DEROctetString(idValue(params.manufacturer, "MANUFACTURER"));
+                var Amodel = new DEROctetString(idValue(params.model, "MODEL"));
                 var brand = new DERTaggedObject(true, 710, Abrand);
                 var device = new DERTaggedObject(true, 711, Adevice);
                 var product = new DERTaggedObject(true, 712, Aproduct);
@@ -239,8 +243,9 @@ public final class KeyboxChainGenerator {
                 var model = new DERTaggedObject(true, 717, Amodel);
 
                 teeEnforcedEncodables = new ASN1Encodable[]{purpose, algorithm, keySize, digest, ecCurve,
-                        noAuthRequired, origin, rootOfTrust, osVersion, osPatchLevel, vendorPatchLevel,
-                        bootPatchLevel, brand, device, product, manufacturer, model};
+                        noAuthRequired, origin, rootOfTrust, osVersion, osPatchLevel,
+                        brand, device, product, manufacturer, model, vendorPatchLevel,
+                        bootPatchLevel};
             } else {
                 teeEnforcedEncodables = new ASN1Encodable[]{purpose, algorithm, keySize, digest, ecCurve,
                         noAuthRequired, origin, rootOfTrust, osVersion, osPatchLevel, vendorPatchLevel,
@@ -265,7 +270,8 @@ public final class KeyboxChainGenerator {
     }
 
     private static int getOsVersion() {
-        String release = Build.VERSION.RELEASE;
+        String release = profileValue("RELEASE");
+        if (release == null) release = Build.VERSION.RELEASE;
         int major = 16, minor = 0, patch = 0;
 
         // Handle cases with additional suffixes like "/BP31"
@@ -284,11 +290,68 @@ public final class KeyboxChainGenerator {
     }
 
     private static int getPatchLevel() {
-        return convertPatchLevel(Build.VERSION.SECURITY_PATCH, false);
+        String patchLevel = profileValue("SECURITY_PATCH");
+        return convertPatchLevel(patchLevel != null ? patchLevel : Build.VERSION.SECURITY_PATCH, false);
     }
 
     private static int getPatchLevelLong() {
-        return convertPatchLevel(Build.VERSION.SECURITY_PATCH, true);
+        String patchLevel = profileValue("SECURITY_PATCH");
+        return convertPatchLevel(patchLevel != null ? patchLevel : Build.VERSION.SECURITY_PATCH, true);
+    }
+
+    private static final String PIHOOKS_PREFIX = "persist.sys.pihooks_";
+
+    /** Same fallback the in-process hooks use when the resource array is unavailable. */
+    private static final String[] FALLBACK_PROFILE = {
+            "BRAND:google",
+            "DEVICE:caiman",
+            "PRODUCT:caiman_beta",
+            "MANUFACTURER:Google",
+            "MODEL:Pixel 9 Pro",
+            "RELEASE:16",
+            "SECURITY_PATCH:2025-10-05",
+    };
+
+    private static HashMap<String, String> sProfile;
+
+    private static synchronized HashMap<String, String> getProfile() {
+        if (sProfile != null) return sProfile;
+        HashMap<String, String> profile = new HashMap<>();
+        try {
+            for (String entry : Resources.getSystem().getStringArray(
+                    com.android.internal.R.array.config_certifiedBuildProperties)) {
+                putProfileEntry(profile, entry);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Certified build properties not available", e);
+        }
+        for (String entry : FALLBACK_PROFILE) {
+            putProfileEntry(profile, entry);
+        }
+        sProfile = profile;
+        return profile;
+    }
+
+    private static void putProfileEntry(HashMap<String, String> profile, String entry) {
+        int split = entry.indexOf(':');
+        if (split <= 0) return;
+        String key = entry.substring(0, split).trim();
+        if (key.startsWith("VERSION.")) key = key.substring("VERSION.".length());
+        profile.putIfAbsent(key, entry.substring(split + 1).trim());
+    }
+
+    /** Value of the spoofed build profile, or null if neither a PIF nor the fallback has it. */
+    private static String profileValue(String key) {
+        String value = SystemProperties.get(PIHOOKS_PREFIX + key, "");
+        if (value.isEmpty()) {
+            value = SystemProperties.get(PIHOOKS_PREFIX + "VERSION." + key, "");
+        }
+        return value.isEmpty() ? getProfile().get(key) : value;
+    }
+
+    private static byte[] idValue(byte[] requested, String key) {
+        String value = profileValue(key);
+        return value == null ? requested : value.getBytes(StandardCharsets.UTF_8);
     }
 
     private static int convertPatchLevel(String patchLevel, boolean longFormat) {
