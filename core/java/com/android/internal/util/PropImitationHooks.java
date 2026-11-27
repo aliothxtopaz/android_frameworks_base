@@ -49,10 +49,15 @@ public class PropImitationHooks {
     private static final String sNetflixModel =
             Resources.getSystem().getString(R.string.config_netflixSpoofModel);
 
+    private static final String ANDROIDX_TEST = "androidx.test";
     private static final String PACKAGE_ARCORE = "com.google.ar.core";
     private static final String PACKAGE_FINSKY = "com.android.vending";
+    private static final String PACKAGE_GMS_RESTORE = "com.google.android.apps.restore";
     private static final String PACKAGE_GMS = "com.google.android.gms";
-    private static final String PROCESS_GMS_UNSTABLE = PACKAGE_GMS + ".unstable";
+    private static final String PROCESS_GMS_UNSTABLE = "unstable";
+    private static final String PROCESS_GMS_PERSISTENT = "persistent";
+    private static final String PROCESS_GMS_PIXEL_MIGRATE = "pixelmigrate";
+    private static final String PROCESS_INSTRUMENTATION = "instrumentation";
     private static final String PACKAGE_NETFLIX = "com.netflix.mediaclient";
 
     private static final ComponentName GMS_ADD_ACCOUNT_ACTIVITY = ComponentName.unflattenFromString(
@@ -71,7 +76,13 @@ public class PropImitationHooks {
         }
 
         sProcessName = processName;
-        sIsGms = packageName.equals(PACKAGE_GMS) && processName.equals(PROCESS_GMS_UNSTABLE);
+        final boolean isPackageGms = packageName.toLowerCase().contains(ANDROIDX_TEST)
+                || packageName.equals(PACKAGE_GMS_RESTORE)
+                || packageName.equals(PACKAGE_GMS);
+        sIsGms = isPackageGms && (processName.toLowerCase().contains(PROCESS_GMS_UNSTABLE)
+                || processName.toLowerCase().contains(PROCESS_GMS_PERSISTENT)
+                || processName.toLowerCase().contains(PROCESS_GMS_PIXEL_MIGRATE)
+                || processName.toLowerCase().contains(PROCESS_INSTRUMENTATION));
         sIsFinsky = packageName.equals(PACKAGE_FINSKY);
 
         /* Set Certified Properties for GMSCore
