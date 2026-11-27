@@ -103,19 +103,33 @@ public class PropImitationHooks {
     private static void setPropValue(String key, Object value) {
         try {
             dlog("Setting prop " + key + " to " + value.toString());
-            Field field = Build.class.getDeclaredField(key);
+            final Field field;
+            if (key.startsWith("VERSION.")) {
+                field = Build.VERSION.class.getDeclaredField(
+                        key.substring("VERSION.".length()));
+            } else {
+                field = Build.class.getDeclaredField(key);
+            }
             field.setAccessible(true);
-            field.set(null, value);
+            final Class<?> type = field.getType();
+            if (type == int.class) {
+                field.setInt(null, Integer.parseInt(value.toString()));
+            } else if (type == long.class) {
+                field.setLong(null, Long.parseLong(value.toString()));
+            } else {
+                field.set(null, value.toString());
+            }
             field.setAccessible(false);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            Log.e(TAG, "Failed to set prop " + key, e);
+        } catch (NoSuchFieldException | IllegalAccessException
+                | NumberFormatException e) {
+            // VERSION.* members are static final and cannot be written by reflection.
+            dlog("Failed to set prop " + key + ": " + e);
         }
     }
 
     private static void setCertifiedPropsForGms() {
-        if (sCertifiedProps.length != 4) {
-            Log.e(TAG, "Insufficient array size for certified props: "
-                    + sCertifiedProps.length + ", required 4");
+        if (sCertifiedProps.length == 0) {
+            Log.e(TAG, "No certified build properties configured");
             return;
         }
         final boolean was = isGmsAddAccountActivityOnTop();
@@ -132,10 +146,12 @@ public class PropImitationHooks {
         };
         if (!was) {
             dlog("Spoofing build for GMS");
-            setPropValue("DEVICE", sCertifiedProps[0]);
-            setPropValue("PRODUCT", sCertifiedProps[1]);
-            setPropValue("MODEL", sCertifiedProps[2]);
-            setPropValue("FINGERPRINT", sCertifiedProps[3]);
+            for (String entry : sCertifiedProps) {
+                final int split = entry.indexOf(':');
+                if (split <= 0 || split == entry.length() - 1) continue;
+                setPropValue(entry.substring(0, split).trim(),
+                        entry.substring(split + 1).trim());
+            }
         } else {
             dlog("Skip spoofing build for GMS, because GmsAddAccountActivityOnTop");
         }
@@ -178,11 +194,9 @@ public class PropImitationHooks {
     }
 
     public static void onEngineGetCertificateChain() {
-        // Check stack for SafetyNet or Play Integrity
-        if (isCallerSafetyNet() || sIsFinsky) {
-            dlog("Blocked key attestation sIsGms=" + sIsGms + " sIsFinsky=" + sIsFinsky);
-            throw new UnsupportedOperationException();
-        }
+        // Attestation is spoofed by KeyboxImitationHooks; do not block it here or
+        // Play Integrity never sees the spoofed chain.
+        dlog("Key attestation requested, sIsGms=" + sIsGms + " sIsFinsky=" + sIsFinsky);
     }
 
     public static void dlog(String msg) {
