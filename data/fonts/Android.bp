@@ -44,6 +44,32 @@ prebuilt_font {
     src: "AndroidClock.ttf",
 }
 
+
+prebuilt_font {
+    name: "JetBrainsMono-Regular.ttf",
+    src: "JetBrainsMono-Regular.ttf",
+}
+
+prebuilt_font {
+    name: "JetBrainsMono-Italic.ttf",
+    src: "JetBrainsMono-Italic.ttf",
+}
+
+prebuilt_font {
+    name: "JetBrainsMono-Medium.ttf",
+    src: "JetBrainsMono-Medium.ttf",
+}
+
+prebuilt_font {
+    name: "JetBrainsMono-Bold.ttf",
+    src: "JetBrainsMono-Bold.ttf",
+}
+
+prebuilt_font {
+    name: "JetBrainsMono-BoldItalic.ttf",
+    src: "JetBrainsMono-BoldItalic.ttf",
+}
+
 /////////////////////////////////
 // Copies the font configuration file into system/etc for the product as fonts.xml.
 // Additional fonts should be installed to /product/fonts/ alongside a corresponding
