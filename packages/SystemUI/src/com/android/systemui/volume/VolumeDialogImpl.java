@@ -79,6 +79,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.SystemClock;
 import android.os.Trace;
+import android.os.UserHandle;
 import android.os.VibrationEffect;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
@@ -578,6 +579,11 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
         mDialog = new CustomDialog(mContext);
 
         initDimens();
+
+        mVolumePanelOnLeft = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.VOLUME_PANEL_ON_LEFT,
+                mContext.getResources().getBoolean(R.bool.config_audioPanelOnLeftSide) ? 1 : 0,
+                UserHandle.USER_CURRENT) != 0;
 
         mConfigurableTexts = new ConfigurableTexts(mContext);
         mHovering = false;

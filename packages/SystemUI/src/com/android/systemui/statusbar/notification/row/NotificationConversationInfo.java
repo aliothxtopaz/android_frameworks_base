@@ -32,13 +32,17 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.ActivityManager;
 import android.app.INotificationManager;
+import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationChannelGroup;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
@@ -48,6 +52,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
 import android.transition.ChangeBounds;
@@ -72,6 +77,7 @@ import com.android.systemui.shade.ShadeController;
 import com.android.systemui.statusbar.notification.NotificationChannelHelper;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
+import com.android.systemui.statusbar.phone.SystemUIDialog;
 import com.android.systemui.wmshell.BubblesManager;
 
 import java.lang.annotation.Retention;
@@ -281,8 +287,60 @@ public class NotificationConversationInfo extends LinearLayout implements
         settingsButton.setOnClickListener(getSettingsOnClickListener());
         settingsButton.setVisibility(settingsButton.hasOnClickListeners() ? VISIBLE : GONE);
 
+        bindForceStopButton();
+
         updateToggleActions(mSelectedAction == -1 ? getPriority() : mSelectedAction,
                 false);
+    }
+
+    /** Add the optional force stop button next to the settings shortcut. */
+    private void bindForceStopButton() {
+        final View killButton = findViewById(R.id.force_stop);
+        if (killButton == null) return;
+
+        final boolean enabled = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.NOTIFICATION_GUTS_KILL_APP_BUTTON, 0,
+                UserHandle.USER_CURRENT) != 0;
+        if (!enabled || isSystemPackage(mPackageName)) {
+            killButton.setVisibility(View.GONE);
+            return;
+        }
+
+        killButton.setVisibility(View.VISIBLE);
+        killButton.setOnClickListener(v -> {
+            final KeyguardManager keyguardManager =
+                    mContext.getSystemService(KeyguardManager.class);
+            if (keyguardManager != null && keyguardManager.inKeyguardRestrictedInputMode()) {
+                return;
+            }
+            final SystemUIDialog dialog = new SystemUIDialog(mContext);
+            dialog.setTitle(mContext.getText(R.string.force_stop_dlg_title));
+            dialog.setMessage(mContext.getText(R.string.force_stop_dlg_text));
+            dialog.setPositiveButton(android.R.string.ok, (d, which) -> {
+                final ActivityManager am = mContext.getSystemService(ActivityManager.class);
+                if (am != null) {
+                    am.forceStopPackage(mPackageName);
+                }
+            });
+            dialog.setNegativeButton(android.R.string.cancel, null);
+            dialog.show();
+        });
+    }
+
+    /** System (platform-signed) packages must never be force stopped from here. */
+    private boolean isSystemPackage(String packageName) {
+        try {
+            final Context userContext = mContext.createContextAsUser(mSbn.getUser(), 0);
+            final PackageManager pm = userContext.getPackageManager();
+            final PackageInfo packageInfo = pm.getPackageInfo(packageName,
+                    PackageManager.GET_SIGNATURES);
+            final PackageInfo sys = pm.getPackageInfo("android", PackageManager.GET_SIGNATURES);
+            return packageInfo.signatures != null && sys.signatures != null
+                    && packageInfo.signatures.length > 0 && sys.signatures.length > 0
+                    && sys.signatures[0].equals(packageInfo.signatures[0]);
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
     }
 
     private void bindHeader() {

@@ -64,6 +64,7 @@ import android.graphics.Rect;
 import android.graphics.Region;
 import android.hardware.biometrics.SensorLocationInternal;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.PowerManager;
@@ -504,6 +505,7 @@ public final class NotificationPanelViewController implements Dumpable {
     private final int mDisplayId;
 
     private GestureDetector mDoubleTapGestureListener;
+    private boolean mDoubleTapSleepEnabled;
 
     private final KeyguardIndicationController mKeyguardIndicationController;
     private int mHeadsUpInset;
@@ -898,6 +900,19 @@ public final class NotificationPanelViewController implements Dumpable {
                         Context.POWER_SERVICE);
                 pm.goToSleep(event.getEventTime());
                 return true;
+            }
+        });
+        final ContentResolver doubleTapResolver = mView.getContext().getContentResolver();
+        final Uri doubleTapSleepUri = Settings.System.getUriFor(
+                Settings.System.DOUBLE_TAP_SLEEP_GESTURE);
+        mDoubleTapSleepEnabled = Settings.System.getInt(doubleTapResolver,
+                Settings.System.DOUBLE_TAP_SLEEP_GESTURE, 1) != 0;
+        doubleTapResolver.registerContentObserver(doubleTapSleepUri, false,
+                new ContentObserver(handler) {
+            @Override
+            public void onChange(boolean selfChange) {
+                mDoubleTapSleepEnabled = Settings.System.getInt(doubleTapResolver,
+                        Settings.System.DOUBLE_TAP_SLEEP_GESTURE, 1) != 0;
             }
         });
         mConversationNotificationManager = conversationNotificationManager;
@@ -4840,7 +4855,9 @@ public final class NotificationPanelViewController implements Dumpable {
                 return false;
             }
 
-            if (mBarState == StatusBarState.KEYGUARD) {
+            if (mDoubleTapSleepEnabled
+                    && (mBarState == StatusBarState.KEYGUARD
+                    || mBarState == StatusBarState.SHADE)) {
                 mDoubleTapGestureListener.onTouchEvent(event);
             }
 
