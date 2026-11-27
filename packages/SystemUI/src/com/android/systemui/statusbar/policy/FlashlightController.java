@@ -24,6 +24,18 @@ public interface FlashlightController extends CallbackController<FlashlightListe
     boolean isAvailable();
     boolean isEnabled();
 
+    /** Whether the torch brightness can be adjusted. */
+    boolean supportsStrengthControl();
+
+    /** Maximum torch brightness level, or 0 when not supported. */
+    int getMaxStrength();
+
+    /** Current torch brightness level. */
+    int getStrength();
+
+    /** Set torch brightness level (1..{@link #getMaxStrength()}). */
+    void setStrength(int level);
+
     public interface FlashlightListener {
 
         /**

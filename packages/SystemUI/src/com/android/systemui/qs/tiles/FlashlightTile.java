@@ -23,6 +23,9 @@ import android.os.Looper;
 import android.provider.MediaStore;
 import android.service.quicksettings.Tile;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.SeekBar;
 import android.widget.Switch;
 
 import androidx.annotation.Nullable;
@@ -39,6 +42,7 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
+import com.android.systemui.statusbar.phone.SystemUIDialog;
 import com.android.systemui.statusbar.policy.FlashlightController;
 
 import javax.inject.Inject;
@@ -113,7 +117,47 @@ public class FlashlightTile extends QSTileImpl<BooleanState> implements
 
     @Override
     protected void handleLongClick(@Nullable View view) {
-        handleClick(view);
+        // Long press opens the brightness slider while the torch is on and the
+        // device supports torch strength control, otherwise keep the old toggle.
+        if (!mState.value || !mFlashlightController.supportsStrengthControl()) {
+            handleClick(view);
+            return;
+        }
+        showStrengthDialog();
+    }
+
+    private void showStrengthDialog() {
+        final int max = mFlashlightController.getMaxStrength();
+        final float density = mContext.getResources().getDisplayMetrics().density;
+        final int padding = (int) (24 * density);
+
+        final SeekBar bar = new SeekBar(mContext);
+        bar.setMax(max - 1);
+        bar.setProgress(Math.max(0, Math.min(mFlashlightController.getStrength() - 1, max - 1)));
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    mFlashlightController.setStrength(progress + 1);
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        final FrameLayout container = new FrameLayout(mContext);
+        container.setPadding(padding, padding / 2, padding, 0);
+        container.addView(bar, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        final SystemUIDialog dialog = new SystemUIDialog(mContext);
+        dialog.setTitle(R.string.quick_settings_flashlight_label);
+        dialog.setView(container);
+        dialog.show();
     }
 
     @Override

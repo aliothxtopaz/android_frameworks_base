@@ -35,6 +35,10 @@ public class FakeFlashlightController extends BaseLeakChecker<FlashlightListener
     public boolean isEnabled;
     @VisibleForTesting
     public boolean hasFlashlight;
+    @VisibleForTesting
+    public int maxStrength = 0;
+    @VisibleForTesting
+    public int strength = 0;
 
     public FakeFlashlightController(LeakCheck test) {
         super(test, "flashlight");
@@ -70,6 +74,26 @@ public class FakeFlashlightController extends BaseLeakChecker<FlashlightListener
     @Override
     public boolean isEnabled() {
         return isEnabled;
+    }
+
+    @Override
+    public boolean supportsStrengthControl() {
+        return maxStrength > 1;
+    }
+
+    @Override
+    public int getMaxStrength() {
+        return maxStrength;
+    }
+
+    @Override
+    public int getStrength() {
+        return strength;
+    }
+
+    @Override
+    public void setStrength(int level) {
+        strength = level;
     }
 
     @Override

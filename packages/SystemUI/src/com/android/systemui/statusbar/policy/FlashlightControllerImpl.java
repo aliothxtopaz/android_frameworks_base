@@ -40,6 +40,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.inject.Inject;
@@ -79,6 +80,10 @@ public class FlashlightControllerImpl implements FlashlightController {
     private final AtomicReference<String> mCameraId;
     private final AtomicBoolean mInitted = new AtomicBoolean(false);
 
+    private final AtomicInteger mStrength = new AtomicInteger(0);
+    private volatile int mMaxStrength = 0;
+    private volatile int mDefaultStrength = 0;
+
     @Inject
     public FlashlightControllerImpl(
             DumpManager dumpManager,
@@ -117,8 +122,58 @@ public class FlashlightControllerImpl implements FlashlightController {
         }
 
         if (mCameraId.get() != null) {
+            initStrengthControl();
             mCameraManager.registerTorchCallback(mExecutor, mTorchCallback);
         }
+    }
+
+    @WorkerThread
+    private void initStrengthControl() {
+        final String cameraId = mCameraId.get();
+        if (cameraId == null) return;
+        try {
+            final CameraCharacteristics c = mCameraManager.getCameraCharacteristics(cameraId);
+            final Integer max = c.get(CameraCharacteristics.FLASH_INFO_STRENGTH_MAXIMUM_LEVEL);
+            final Integer def = c.get(CameraCharacteristics.FLASH_INFO_STRENGTH_DEFAULT_LEVEL);
+            if (max != null && max > 1) {
+                mMaxStrength = max;
+                mDefaultStrength = def != null ? def : (max / 2);
+                mStrength.set(mDefaultStrength);
+            }
+        } catch (CameraAccessException e) {
+            Log.e(TAG, "Couldn't query torch strength", e);
+        }
+    }
+
+    @Override
+    public boolean supportsStrengthControl() {
+        return mMaxStrength > 1;
+    }
+
+    @Override
+    public int getMaxStrength() {
+        return mMaxStrength;
+    }
+
+    @Override
+    public int getStrength() {
+        return mStrength.get();
+    }
+
+    @Override
+    public void setStrength(int level) {
+        if (mMaxStrength <= 1) return;
+        final int clamped = Math.max(1, Math.min(level, mMaxStrength));
+        mStrength.set(clamped);
+        mExecutor.execute(() -> {
+            final String cameraId = mCameraId.get();
+            if (cameraId == null) return;
+            try {
+                mCameraManager.turnOnTorchWithStrengthLevel(cameraId, clamped);
+            } catch (CameraAccessException | IllegalArgumentException e) {
+                Log.e(TAG, "Couldn't set torch strength", e);
+            }
+        });
     }
 
     public void setFlashlight(boolean enabled) {
@@ -131,7 +186,14 @@ public class FlashlightControllerImpl implements FlashlightController {
             synchronized (this) {
                 if (mFlashlightEnabled != enabled) {
                     try {
-                        mCameraManager.setTorchMode(mCameraId.get(), enabled);
+                        if (enabled && mMaxStrength > 1) {
+                            final int level = mStrength.get() > 0
+                                    ? mStrength.get() : mDefaultStrength;
+                            mStrength.set(level);
+                            mCameraManager.turnOnTorchWithStrengthLevel(mCameraId.get(), level);
+                        } else {
+                            mCameraManager.setTorchMode(mCameraId.get(), enabled);
+                        }
                     } catch (CameraAccessException e) {
                         Log.e(TAG, "Couldn't set torch mode", e);
                         dispatchError();
@@ -243,6 +305,14 @@ public class FlashlightControllerImpl implements FlashlightController {
                 setCameraAvailable(false);
                 mSecureSettings.putInt(Settings.Secure.FLASHLIGHT_AVAILABLE, 0);
 
+            }
+        }
+
+        @Override
+        @WorkerThread
+        public void onTorchStrengthLevelChanged(String cameraId, int newStrengthLevel) {
+            if (TextUtils.equals(cameraId, mCameraId.get())) {
+                mStrength.set(newStrengthLevel);
             }
         }
 
