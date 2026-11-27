@@ -44,6 +44,23 @@ public class PropImitationHooks {
     private static final String[] sCertifiedProps =
             Resources.getSystem().getStringArray(R.array.config_certifiedBuildProperties);
 
+    // Used when the overlay-provided array is empty (Resources.getSystem() does not
+    // always see RROs). A PIF JSON picked in Settings still overrides this.
+    private static final String[] FALLBACK_CERTIFIED_PROPS = {
+            "MANUFACTURER:Google",
+            "BRAND:google",
+            "DEVICE:caiman",
+            "PRODUCT:caiman_beta",
+            "MODEL:Pixel 9 Pro",
+            "FINGERPRINT:google/caiman_beta/caiman:16/BP41.250916.009.A1/14246511:user/release-keys",
+            "ID:BP41.250916.009.A1",
+            "TAGS:release-keys",
+            "TYPE:user",
+            "SECURITY_PATCH:2025-10-05",
+            "RELEASE:16",
+            "DEVICE_INITIAL_SDK_INT:32",
+    };
+
     private static final String sStockFp =
             Resources.getSystem().getString(R.string.config_stockFingerprint);
 
@@ -129,10 +146,8 @@ public class PropImitationHooks {
     }
 
     private static void setCertifiedPropsForGms() {
-        if (sCertifiedProps.length == 0) {
-            Log.e(TAG, "No certified build properties configured");
-            return;
-        }
+        final String[] certifiedProps = sCertifiedProps.length == 0
+                ? FALLBACK_CERTIFIED_PROPS : sCertifiedProps;
         final boolean was = isGmsAddAccountActivityOnTop();
         final TaskStackListener taskStackListener = new TaskStackListener() {
             @Override
@@ -151,7 +166,7 @@ public class PropImitationHooks {
                 dlog("User PIF applied, skipping certified props");
             } else {
                 dlog("Spoofing build for GMS");
-                for (String entry : sCertifiedProps) {
+                for (String entry : certifiedProps) {
                     final int split = entry.indexOf(':');
                     if (split <= 0 || split == entry.length() - 1) continue;
                     setPropValue(entry.substring(0, split).trim(),
