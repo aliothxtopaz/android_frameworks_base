@@ -69,9 +69,6 @@ public class PowerOffAlarmService extends SystemService {
         super(context);
         mContext = context;
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
-        mNotificationManager = (NotificationManager) mContext.getSystemService(
-                Context.NOTIFICATION_SERVICE);
-        setupNotification();
     }
 
     @Override
@@ -161,14 +158,27 @@ public class PowerOffAlarmService extends SystemService {
         sharedPrefs.edit().putLong(PREF_NEXT_ALARM, time).commit();
     }
 
+    private NotificationManager getNotificationManager() {
+        if (mNotificationManager == null) {
+            mNotificationManager = (NotificationManager) mContext.getSystemService(
+                    Context.NOTIFICATION_SERVICE);
+        }
+        return mNotificationManager;
+    }
+
     private synchronized void updateNotification(boolean isSet) {
-        if (mNotificationManager == null || mNotification == null) return;
-        mNotificationManager.cancel(NOTIFICATION_ID);
+        final NotificationManager nm = getNotificationManager();
+        if (nm == null) return;
+        if (mNotification == null) setupNotification();
+        if (mNotification == null) return;
+        nm.cancel(NOTIFICATION_ID);
         if (!isSet) return;
-        mNotificationManager.notify(NOTIFICATION_ID, mNotification);
+        nm.notify(NOTIFICATION_ID, mNotification);
     }
 
     private void setupNotification() {
+        final NotificationManager nm = getNotificationManager();
+        if (nm == null) return;
         final Intent intent = (new Intent(ACTION_SHOW_ALARMS))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         final PendingIntent pendingIntent = PendingIntent.getActivity(mContext, 0, intent,
@@ -177,7 +187,7 @@ public class PowerOffAlarmService extends SystemService {
                 mContext.getText(R.string.notification_channel_poweroff_alarm),
                 NotificationManager.IMPORTANCE_LOW);
         channel.setBlockable(true);
-        mNotificationManager.createNotificationChannel(channel);
+        nm.createNotificationChannel(channel);
         mNotification = new Notification.Builder(mContext, TAG /* channel id */)
                 .setContentTitle(mContext.getText(R.string.poweroff_alarm_title))
                 .setContentText(mContext.getText(R.string.poweroff_alarm_body))
