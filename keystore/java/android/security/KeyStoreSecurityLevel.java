@@ -145,18 +145,30 @@ public class KeyStoreSecurityLevel {
     public KeyMetadata generateKey(@NonNull KeyDescriptor descriptor, KeyDescriptor attestationKey,
             Collection<KeyParameter> args, int flags, byte[] entropy)
             throws KeyStoreException {
-        KeyboxUtils.remove(android.os.Binder.getCallingUid(), descriptor.alias);
-        if (attestationKey == null) {
-            KeyMetadata metadata = KeyboxImitationHooks.generateKey(mSecurityLevel,
-                    descriptor, args);
-            if (metadata != null) {
-                return metadata;
+        final KeyParameter[] keyParameters = args.toArray(new KeyParameter[args.size()]);
+        KeyboxUtils.remove(android.os.Process.myUid(), descriptor.alias);
+        try {
+            // Always create the real key first. The old cert-generation-only path
+            // returned a chain for a key that did not exist in the TEE, so every
+            // signature operation against it failed.
+            KeyMetadata metadata = handleExceptions(() -> mSecurityLevel.generateKey(
+                    descriptor, attestationKey, keyParameters, flags, entropy));
+            if (attestationKey == null) {
+                return KeyboxImitationHooks.onGenerateKey(descriptor, metadata, keyParameters);
             }
+            return metadata;
+        } catch (KeyStoreException e) {
+            if (attestationKey == null) {
+                KeyMetadata fallback = KeyboxImitationHooks.generateFallbackKey(
+                        mSecurityLevel, descriptor, args);
+                if (fallback != null) {
+                    Log.w(TAG, "Real key generation failed for " + descriptor.alias
+                            + ", using cert-generation fallback", e);
+                    return fallback;
+                }
+            }
+            throw e;
         }
-
-        return handleExceptions(() -> mSecurityLevel.generateKey(
-                descriptor, attestationKey, args.toArray(new KeyParameter[args.size()]),
-                flags, entropy));
     }
 
     /**

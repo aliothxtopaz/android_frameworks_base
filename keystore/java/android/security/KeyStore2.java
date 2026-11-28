@@ -252,12 +252,14 @@ public class KeyStore2 {
      */
     public KeyEntryResponse getKeyEntry(@NonNull KeyDescriptor descriptor)
             throws KeyStoreException {
-        KeyEntryResponse response = KeyboxImitationHooks.onGetKeyEntry(descriptor);
-        if (response != null) {
-            return response;
+        KeyEntryResponse cached = KeyboxImitationHooks.getFallbackKeyEntry(descriptor);
+        if (cached != null) {
+            return cached;
         }
 
-        return handleRemoteExceptionWithRetry((service) -> service.getKeyEntry(descriptor));
+        KeyEntryResponse response = handleRemoteExceptionWithRetry(
+                (service) -> service.getKeyEntry(descriptor));
+        return KeyboxImitationHooks.onGetKeyEntry(descriptor, response);
     }
 
     /**
@@ -303,7 +305,7 @@ public class KeyStore2 {
      */
     public void deleteKey(@NonNull KeyDescriptor descriptor)
             throws KeyStoreException {
-        KeyboxUtils.remove(android.os.Binder.getCallingUid(), descriptor.alias);
+        KeyboxUtils.remove(android.os.Process.myUid(), descriptor.alias);
 
         handleRemoteExceptionWithRetry((service) -> {
             service.deleteKey(descriptor);

@@ -20,7 +20,6 @@ package com.android.internal.util.android;
 import android.app.Application;
 import android.content.Context;
 import android.graphics.Rect;
-import android.os.Build;
 import android.os.SystemProperties;
 import android.text.TextUtils;
 import android.util.ArrayMap;
@@ -29,7 +28,8 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.WindowManager;
 
-import java.lang.reflect.Field;
+import com.android.internal.util.PropImitationHooks;
+
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Map;
@@ -249,39 +249,7 @@ public class PropsHooksUtils {
     }
 
     private static void setPropValue(String packageName, String key, Object newValue) {
-        try {
-            Field field = getBuildClassField(key);
-            if (field == null) return;
-
-            if (field.getType() == int.class) {
-                field.setInt(null, newValue instanceof Integer
-                        ? (Integer) newValue : Integer.parseInt(newValue.toString()));
-            } else if (field.getType() == long.class) {
-                field.setLong(null, newValue instanceof Long
-                        ? (Long) newValue : Long.parseLong(newValue.toString()));
-            } else {
-                field.set(null, newValue.toString());
-            }
-        } catch (IllegalAccessException | IllegalArgumentException e) {
-            Log.e(TAG, "Failed to set prop " + key + " for package " + packageName, e);
-        }
-    }
-
-    private static Field getBuildClassField(String key) {
-        try {
-            Field field = Build.class.getDeclaredField(key);
-            field.setAccessible(true);
-            return field;
-        } catch (NoSuchFieldException e1) {
-            try {
-                Field field = Build.VERSION.class.getDeclaredField(key);
-                field.setAccessible(true);
-                return field;
-            } catch (NoSuchFieldException e2) {
-                Log.e(TAG, "Field " + key + " not found", e2);
-                return null;
-            }
-        }
+        PropImitationHooks.setBuildField(key, newValue);
     }
 
     private static boolean isSpoofingEnabled() {

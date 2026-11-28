@@ -34,7 +34,10 @@ import android.util.Log;
 import com.android.internal.R;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Arrays;
+import java.util.Objects;
 
 public class PropImitationHooks {
 
@@ -119,29 +122,210 @@ public class PropImitationHooks {
     }
 
     private static void setPropValue(String key, Object value) {
+        setBuildField(key, value);
+    }
+
+    /**
+     * Writes a Build/Build.VERSION field, using Unsafe for static finals and
+     * reading the value back. Shared with PropsHooksUtils so PIF JSON values
+     * hit the same path.
+     */
+    public static void setBuildField(String key, Object value) {
         try {
-            dlog("Setting prop " + key + " to " + value.toString());
-            final Field field;
-            if (key.startsWith("VERSION.")) {
-                field = Build.VERSION.class.getDeclaredField(
-                        key.substring("VERSION.".length()));
-            } else {
-                field = Build.class.getDeclaredField(key);
+            Field field = findBuildField(key);
+            if (field == null) {
+                dlog("No Build field for " + key);
+                return;
             }
-            field.setAccessible(true);
-            final Class<?> type = field.getType();
+
+            Object newValue = value;
+            Class<?> type = field.getType();
             if (type == int.class) {
-                field.setInt(null, Integer.parseInt(value.toString()));
+                newValue = value instanceof Integer
+                        ? value : Integer.parseInt(value.toString());
             } else if (type == long.class) {
-                field.setLong(null, Long.parseLong(value.toString()));
+                newValue = value instanceof Long
+                        ? value : Long.parseLong(value.toString());
+            } else if (type == boolean.class) {
+                newValue = value instanceof Boolean
+                        ? value : Boolean.parseBoolean(value.toString());
+            } else if (type == String.class) {
+                newValue = value.toString();
             } else {
-                field.set(null, value.toString());
+                dlog("Unsupported Build field type " + type + " for " + key);
+                return;
             }
+
+            Object oldValue = field.get(null);
+            setStaticField(field, newValue);
+            dlog("Setting prop " + key + ": " + oldValue + " -> " + newValue);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to set prop " + key, e);
+        }
+    }
+
+    private static Field findBuildField(String key) {
+        if (key.startsWith("VERSION.")) {
+            try {
+                return Build.VERSION.class.getDeclaredField(
+                        key.substring("VERSION.".length()));
+            } catch (NoSuchFieldException e) {
+                return null;
+            }
+        }
+        try {
+            return Build.class.getDeclaredField(key);
+        } catch (NoSuchFieldException e) {
+            // RELEASE, SECURITY_PATCH and SDK_INT live in Build.VERSION.
+            try {
+                return Build.VERSION.class.getDeclaredField(key);
+            } catch (NoSuchFieldException ignored) {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * Writes a static field, falling back to Unsafe when ART refuses to set a
+     * static final one (Build.VERSION.RELEASE, SECURITY_PATCH, SDK_INT). The
+     * write is read back so a silent no-op is reported instead of looking like
+     * a successful spoof.
+     *
+     * Adapted from Lunaris-AOSP frameworks_base (16.2) PlayIntegritySpoofService.
+     */
+    private static void setStaticField(Field field, Object value) throws Exception {
+        field.setAccessible(true);
+        try {
+            try {
+                field.set(null, value);
+            } catch (Exception e) {
+                putStaticViaUnsafe(field, value);
+            }
+            Object now = field.get(null);
+            if (!Objects.equals(now, value)) {
+                putStaticViaUnsafe(field, value);
+                now = field.get(null);
+                if (!Objects.equals(now, value)) {
+                    throw new IllegalStateException("write to " + field.getName()
+                            + " did not stick (still " + now + ")");
+                }
+            }
+        } finally {
             field.setAccessible(false);
-        } catch (NoSuchFieldException | IllegalAccessException
-                | NumberFormatException e) {
-            // VERSION.* members are static final and cannot be written by reflection.
-            dlog("Failed to set prop " + key + ": " + e);
+        }
+    }
+
+    private static final Object sUnsafeLock = new Object();
+    private static boolean sUnsafeLookedUp;
+    private static Object sUnsafe;
+    private static Method sPutObject;
+    private static Method sPutInt;
+    private static Method sPutLong;
+    private static Method sPutBoolean;
+    private static Field sFieldOffset;
+    private static Method sFieldGetOffset;
+
+    private static boolean initUnsafe() {
+        synchronized (sUnsafeLock) {
+            if (sUnsafeLookedUp) {
+                return sUnsafe != null && sPutObject != null
+                        && (sFieldOffset != null || sFieldGetOffset != null);
+            }
+            sUnsafeLookedUp = true;
+
+            try {
+                Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
+                Object unsafe = null;
+                for (String name : new String[] { "theUnsafe", "THE_ONE" }) {
+                    try {
+                        Field f = unsafeClass.getDeclaredField(name);
+                        f.setAccessible(true);
+                        unsafe = f.get(null);
+                        if (unsafe != null) break;
+                    } catch (Throwable ignored) {
+                    }
+                }
+                if (unsafe == null) {
+                    try {
+                        unsafe = unsafeClass.getMethod("getUnsafe").invoke(null);
+                    } catch (Throwable ignored) {
+                    }
+                }
+                if (unsafe == null) {
+                    Log.w(TAG, "sun.misc.Unsafe instance unavailable");
+                    return false;
+                }
+
+                sPutObject = unsafeClass.getMethod("putObject",
+                        Object.class, long.class, Object.class);
+                sPutInt = unsafeClass.getMethod("putInt",
+                        Object.class, long.class, int.class);
+                sPutLong = unsafeClass.getMethod("putLong",
+                        Object.class, long.class, long.class);
+                try {
+                    sPutBoolean = unsafeClass.getMethod("putBoolean",
+                            Object.class, long.class, boolean.class);
+                } catch (NoSuchMethodException ignored) {
+                }
+                sUnsafe = unsafe;
+            } catch (Throwable t) {
+                Log.w(TAG, "Failed to resolve sun.misc.Unsafe: " + t);
+                sUnsafe = null;
+                return false;
+            }
+
+            try {
+                Field f = Field.class.getDeclaredField("offset");
+                f.setAccessible(true);
+                sFieldOffset = f;
+            } catch (Throwable ignored) {
+            }
+            if (sFieldOffset == null) {
+                try {
+                    Method m = Field.class.getDeclaredMethod("getOffset");
+                    m.setAccessible(true);
+                    sFieldGetOffset = m;
+                } catch (Throwable ignored) {
+                }
+            }
+            if (sFieldOffset == null && sFieldGetOffset == null) {
+                Log.w(TAG, "Unable to resolve java.lang.reflect.Field offset");
+                return false;
+            }
+            return true;
+        }
+    }
+
+    private static long fieldOffset(Field field) throws ReflectiveOperationException {
+        if (sFieldOffset != null) {
+            return ((Number) sFieldOffset.get(field)).longValue();
+        }
+        return ((Number) sFieldGetOffset.invoke(field)).longValue();
+    }
+
+    private static void putStaticViaUnsafe(Field field, Object value)
+            throws ReflectiveOperationException {
+        if (!initUnsafe()) {
+            throw new IllegalStateException("Unsafe fallback unavailable");
+        }
+        if (!Modifier.isStatic(field.getModifiers())) {
+            throw new IllegalArgumentException(field.getName() + " is not static");
+        }
+
+        Object base = field.getDeclaringClass();
+        long offset = fieldOffset(field);
+        Class<?> type = field.getType();
+
+        if (!type.isPrimitive()) {
+            sPutObject.invoke(sUnsafe, base, offset, value);
+        } else if (type == int.class) {
+            sPutInt.invoke(sUnsafe, base, offset, ((Number) value).intValue());
+        } else if (type == long.class) {
+            sPutLong.invoke(sUnsafe, base, offset, ((Number) value).longValue());
+        } else if (type == boolean.class && sPutBoolean != null) {
+            sPutBoolean.invoke(sUnsafe, base, offset, (Boolean) value);
+        } else {
+            throw new IllegalArgumentException("Unsupported static type " + type);
         }
     }
 

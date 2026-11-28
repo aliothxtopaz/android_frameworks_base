@@ -20,10 +20,8 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.SystemProperties;
 import android.os.UserHandle;
-import android.provider.Settings;
 import android.security.keystore.KeyProperties;
 import android.system.keystore2.KeyDescriptor;
-import android.util.Base64;
 import android.util.Log;
 
 import android.annotation.Nullable;
@@ -57,8 +55,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
-import java.security.PrivateKey;
-import java.security.SecureRandom;
 import java.security.Security;
 import java.security.cert.Certificate;
 import java.security.spec.ECGenParameterSpec;
@@ -106,11 +102,13 @@ public final class KeyboxChainGenerator {
             final String keyboxAlgorithm = Objects.equals(params.algorithm, Algorithm.EC)
                     ? KeyProperties.KEY_ALGORITHM_EC
                     : KeyProperties.KEY_ALGORITHM_RSA;
-            X509CertificateHolder issuer = KeyboxUtils.getCertificateHolder(keyboxAlgorithm);
-            if (issuer == null) {
-                dlog("Keybox has no " + keyboxAlgorithm + " key, not spoofing");
+            KeyboxUtils.Keybox keybox = KeyboxUtils.getSigningKeybox(keyboxAlgorithm);
+            if (keybox == null) {
+                dlog("No usable keybox for " + keyboxAlgorithm + ", not spoofing");
                 return null;
             }
+            X509CertificateHolder issuer = new X509CertificateHolder(
+                    keybox.certificates.get(0).getEncoded());
             X509v3CertificateBuilder certBuilder = new X509v3CertificateBuilder(
                     issuer.getSubject(),
                     params.certificateSerial,
@@ -122,24 +120,19 @@ public final class KeyboxChainGenerator {
                     )
             );
 
-            KeyUsage keyUsage = new KeyUsage(KeyUsage.keyCertSign);
-            certBuilder.addExtension(Extension.keyUsage, true, keyUsage);
+            int keyUsageBits = keyUsageFromPurposes(params.purpose);
+            if (keyUsageBits != 0) {
+                certBuilder.addExtension(Extension.keyUsage, true,
+                        new KeyUsage(keyUsageBits));
+            }
             certBuilder.addExtension(createExtension(params, uid));
 
-            PrivateKey signingKey = KeyboxUtils.getPrivateKey(keyboxAlgorithm);
-            if (signingKey == null) {
-                dlog("Keybox has no " + keyboxAlgorithm + " private key, not spoofing");
-                return null;
-            }
-            ContentSigner contentSigner = Objects.equals(params.algorithm, Algorithm.EC)
-                    ? new JcaContentSignerBuilder("SHA256withECDSA").build(signingKey)
-                    : new JcaContentSignerBuilder("SHA256withRSA").build(signingKey);
+            ContentSigner contentSigner = "EC".equalsIgnoreCase(keybox.privateKey.getAlgorithm())
+                    ? new JcaContentSignerBuilder("SHA256withECDSA").build(keybox.privateKey)
+                    : new JcaContentSignerBuilder("SHA256withRSA").build(keybox.privateKey);
             X509CertificateHolder certHolder = certBuilder.build(contentSigner);
             Certificate leaf = KeyboxUtils.getCertificateFromHolder(certHolder);
-            List<Certificate> chain = KeyboxUtils.getCertificateChain(keyboxAlgorithm);
-            if (chain == null) {
-                return null;
-            }
+            List<Certificate> chain = new ArrayList<>(keybox.certificates);
             chain.add(0, leaf);
             dlog("Successfully generated X500 Cert for alias: " + descriptor.alias);
             return chain;
@@ -157,6 +150,22 @@ public final class KeyboxChainGenerator {
         return result;
     }
 
+    /** Same purpose -> KeyUsage mapping stock KeyMint uses. */
+    private static int keyUsageFromPurposes(List<Integer> purposes) {
+        int bits = 0;
+        for (int purpose : purposes) {
+            switch (purpose) {
+                case 2: bits |= KeyUsage.digitalSignature; break;  // SIGN
+                case 1: bits |= KeyUsage.dataEncipherment; break;  // DECRYPT
+                case 5: bits |= KeyUsage.keyEncipherment; break;   // WRAP_KEY
+                case 6: bits |= KeyUsage.keyAgreement; break;      // AGREE_KEY
+                case 7: bits |= KeyUsage.keyCertSign; break;       // ATTEST_KEY
+                default: break;
+            }
+        }
+        return bits;
+    }
+
     private static Extension createExtension(KeyGenParameters params, int uid) {
         try {
             Context context = ActivityThread.currentApplication();
@@ -164,31 +173,9 @@ public final class KeyboxChainGenerator {
                 Log.e(TAG, "Context is null in createExtension");
                 return null;
             }
-            SecureRandom secureRandom = new SecureRandom();
-            
-            String key = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.VBOOT_KEY);
-            byte[] verifiedBootKey;
-            if (key == null) {
-                byte[] randomBytes = new byte[32];
-                secureRandom.nextBytes(randomBytes);
-                String encoded = Base64.encodeToString(randomBytes, Base64.NO_WRAP);
-                Settings.Secure.putString(context.getContentResolver(), Settings.Secure.VBOOT_KEY, encoded);
-                verifiedBootKey = randomBytes;
-            } else {
-                verifiedBootKey = Base64.decode(key, Base64.NO_WRAP);
-            }
 
-            String hash = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.VBOOT_HASH);
-            byte[] verifiedBootHash;
-            if (hash == null) {
-                byte[] randomBytes = new byte[32];
-                secureRandom.nextBytes(randomBytes);
-                String encoded = Base64.encodeToString(randomBytes, Base64.NO_WRAP);
-                Settings.Secure.putString(context.getContentResolver(), Settings.Secure.VBOOT_HASH, encoded);
-                verifiedBootHash = randomBytes;
-            } else {
-                verifiedBootHash = Base64.decode(hash, Base64.NO_WRAP);
-            }
+            byte[] verifiedBootKey = KeyboxAttestationUtils.getBootKey();
+            byte[] verifiedBootHash = KeyboxAttestationUtils.getBootHash();
 
             ASN1Encodable[] rootOfTrustEncodables = {
                     new DEROctetString(verifiedBootKey),
@@ -269,7 +256,7 @@ public final class KeyboxChainGenerator {
         return null;
     }
 
-    private static int getOsVersion() {
+    static int getOsVersion() {
         String release = profileValue("RELEASE");
         if (release == null) release = Build.VERSION.RELEASE;
         int major = 16, minor = 0, patch = 0;
@@ -289,12 +276,12 @@ public final class KeyboxChainGenerator {
         return major * 10000 + minor * 100 + patch;
     }
 
-    private static int getPatchLevel() {
+    static int getPatchLevel() {
         String patchLevel = profileValue("SECURITY_PATCH");
         return convertPatchLevel(patchLevel != null ? patchLevel : Build.VERSION.SECURITY_PATCH, false);
     }
 
-    private static int getPatchLevelLong() {
+    static int getPatchLevelLong() {
         String patchLevel = profileValue("SECURITY_PATCH");
         return convertPatchLevel(patchLevel != null ? patchLevel : Build.VERSION.SECURITY_PATCH, true);
     }
@@ -341,6 +328,10 @@ public final class KeyboxChainGenerator {
     }
 
     /** Value of the spoofed build profile, or null if neither a PIF nor the fallback has it. */
+    static String getProfileValue(String key) {
+        return profileValue(key);
+    }
+
     private static String profileValue(String key) {
         String value = SystemProperties.get(PIHOOKS_PREFIX + key, "");
         if (value.isEmpty()) {
