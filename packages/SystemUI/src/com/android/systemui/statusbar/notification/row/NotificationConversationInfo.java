@@ -47,9 +47,11 @@ import android.content.pm.PackageManager;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
 import android.content.res.TypedArray;
+import android.database.ContentObserver;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -104,6 +106,7 @@ public class NotificationConversationInfo extends LinearLayout implements
     private String mAppName;
     private int mAppUid;
     private String mDelegatePkg;
+    private ContentObserver mForceStopSettingsObserver;
     private NotificationChannel mNotificationChannel;
     private ShortcutInfo mShortcutInfo;
     private NotificationEntry mEntry;
@@ -298,15 +301,6 @@ public class NotificationConversationInfo extends LinearLayout implements
         final View killButton = findViewById(R.id.force_stop);
         if (killButton == null) return;
 
-        final boolean enabled = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.NOTIFICATION_GUTS_KILL_APP_BUTTON, 0,
-                UserHandle.USER_CURRENT) != 0;
-        if (!enabled || isSystemPackage(mPackageName)) {
-            killButton.setVisibility(View.GONE);
-            return;
-        }
-
-        killButton.setVisibility(View.VISIBLE);
         killButton.setOnClickListener(v -> {
             final KeyguardManager keyguardManager =
                     mContext.getSystemService(KeyguardManager.class);
@@ -326,21 +320,36 @@ public class NotificationConversationInfo extends LinearLayout implements
             dialog.setNegativeButton(android.R.string.cancel, null);
             dialog.show();
         });
+        updateForceStopButton(killButton);
+
+        if (mForceStopSettingsObserver != null) {
+            mContext.getContentResolver().unregisterContentObserver(mForceStopSettingsObserver);
+        }
+        mForceStopSettingsObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
+            @Override
+            public void onChange(boolean selfChange) {
+                updateForceStopButton(findViewById(R.id.force_stop));
+            }
+        };
+        mContext.getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.NOTIFICATION_GUTS_KILL_APP_BUTTON),
+                false, mForceStopSettingsObserver);
     }
 
-    /** System (platform-signed) packages must never be force stopped from here. */
-    private boolean isSystemPackage(String packageName) {
-        try {
-            final Context userContext = mContext.createContextAsUser(mSbn.getUser(), 0);
-            final PackageManager pm = userContext.getPackageManager();
-            final PackageInfo packageInfo = pm.getPackageInfo(packageName,
-                    PackageManager.GET_SIGNATURES);
-            final PackageInfo sys = pm.getPackageInfo("android", PackageManager.GET_SIGNATURES);
-            return packageInfo.signatures != null && sys.signatures != null
-                    && packageInfo.signatures.length > 0 && sys.signatures.length > 0
-                    && sys.signatures[0].equals(packageInfo.signatures[0]);
-        } catch (PackageManager.NameNotFoundException e) {
-            return false;
+    private void updateForceStopButton(View killButton) {
+        if (killButton == null) return;
+        final boolean enabled = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.NOTIFICATION_GUTS_KILL_APP_BUTTON, 0,
+                UserHandle.USER_CURRENT) != 0;
+        killButton.setVisibility(enabled
+                && !NotificationInfo.isProtectedPackage(mPm, mPackageName)
+                ? View.VISIBLE : View.GONE);
+    }
+
+    private void unbindForceStopSettingsObserver() {
+        if (mForceStopSettingsObserver != null) {
+            mContext.getContentResolver().unregisterContentObserver(mForceStopSettingsObserver);
+            mForceStopSettingsObserver = null;
         }
     }
 
@@ -473,7 +482,15 @@ public class NotificationConversationInfo extends LinearLayout implements
     }
 
     @Override
-    public void onFinishedClosing() { }
+    public void onFinishedClosing() {
+        unbindForceStopSettingsObserver();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        unbindForceStopSettingsObserver();
+        super.onDetachedFromWindow();
+    }
 
     @Override
     public boolean needsFalsingProtection() {
@@ -629,6 +646,7 @@ public class NotificationConversationInfo extends LinearLayout implements
 
     @Override
     public boolean handleCloseControls(boolean save, boolean force) {
+        unbindForceStopSettingsObserver();
         if (save && mSelectedAction > -1) {
             updateChannel();
         }
