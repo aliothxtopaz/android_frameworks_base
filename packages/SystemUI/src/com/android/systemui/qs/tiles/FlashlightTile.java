@@ -83,9 +83,7 @@ public class FlashlightTile extends QSTileImpl<BooleanState> implements
 
     @Override
     public BooleanState newTileState() {
-        BooleanState state = new BooleanState();
-        state.handlesLongClick = false;
-        return state;
+        return new BooleanState();
     }
 
     @Override
@@ -120,8 +118,8 @@ public class FlashlightTile extends QSTileImpl<BooleanState> implements
     @Override
     protected void handleLongClick(@Nullable View view) {
         if (!mFlashlightController.supportsStrengthControl()) {
-            Slog.i(TAG, "Long press: no strength control, toggling");
-            handleClick(view);
+            // No strength control on this device: keep the upstream long-press action.
+            super.handleLongClick(view);
             return;
         }
         Slog.i(TAG, "Long press: opening strength dialog, on=" + mState.value
@@ -174,6 +172,8 @@ public class FlashlightTile extends QSTileImpl<BooleanState> implements
         state.label = mHost.getContext().getString(R.string.quick_settings_flashlight_label);
         state.secondaryLabel = "";
         state.stateDescription = "";
+        // Only advertise a long click when the slider is actually reachable.
+        state.handlesLongClick = mFlashlightController.supportsStrengthControl();
         if (!mFlashlightController.isAvailable()) {
             state.secondaryLabel = mContext.getString(
                     R.string.quick_settings_flashlight_camera_in_use);
