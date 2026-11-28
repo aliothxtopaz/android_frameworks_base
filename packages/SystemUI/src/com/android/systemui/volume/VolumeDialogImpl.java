@@ -319,6 +319,10 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
     // Volume panel placement left or right
     private boolean mVolumePanelOnLeft;
 
+    // Haptic tick that arrived just before the dialog became visible (volume key).
+    private boolean mPendingHapticTick;
+    private long mPendingHapticTickTime;
+
     private ContentObserver mVolumePanelOnLeftObserver;
 
     // Volume panel expand state
@@ -1730,6 +1734,12 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
         mShowing = true;
         mIsAnimatingDismiss = false;
         mDialog.show();
+        if (mPendingHapticTick) {
+            if (SystemClock.uptimeMillis() - mPendingHapticTickTime < 1000) {
+                Dependency.get(VibratorHelper.class).vibrate(VibrationEffect.EFFECT_TICK);
+            }
+            mPendingHapticTick = false;
+        }
         Events.writeEvent(Events.EVENT_SHOW_DIALOG, reason, keyguardLocked);
         mController.notifyVisible(true);
         mController.getCaptionsComponentState(false);
@@ -2204,7 +2214,14 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
                         && stream == state.activeStream
                         && Settings.System.getInt(mContext.getContentResolver(),
                                 Settings.System.HAPTIC_VOLUME, 0) != 0) {
-                    Dependency.get(VibratorHelper.class).vibrate(VibrationEffect.EFFECT_TICK);
+                    if (mShowing) {
+                        Dependency.get(VibratorHelper.class).vibrate(VibrationEffect.EFFECT_TICK);
+                    } else {
+                        // The level update arrives before the show request; keep it until
+                        // showH() so the first hardware-key step still ticks.
+                        mPendingHapticTick = true;
+                        mPendingHapticTickTime = SystemClock.uptimeMillis();
+                    }
                 }
                 mHapticVolumeLevels.put(stream, ss.level);
             }
