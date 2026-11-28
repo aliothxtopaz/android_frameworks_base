@@ -229,6 +229,48 @@ public class KeyboxImitationHooks {
         }
     }
 
+    /**
+     * Some Keymaster HALs cannot attest the device-ID tags (-66 CANNOT_ATTEST_IDS).
+     * Strip them from the real generateKey() request; the keybox leaf hack adds the
+     * spoofed IDs afterwards. Only applies to processes we are actually spoofing.
+     */
+    public static KeyParameter[] withoutAttestationIds(KeyParameter[] args) {
+        if (args == null || args.length == 0
+                || !KeyProviderManager.isKeyboxAvailable()
+                || !KeyboxUtils.shouldSpoofAttestationIds()) {
+            return args;
+        }
+        List<KeyParameter> filtered = new ArrayList<>(args.length);
+        boolean stripped = false;
+        for (KeyParameter parameter : args) {
+            if (isAttestationIdTag(parameter.tag)) {
+                stripped = true;
+            } else {
+                filtered.add(parameter);
+            }
+        }
+        if (!stripped) return args;
+        Log.i(TAG, "Dropped device-ID attestation parameters the HAL cannot attest;"
+                + " the keybox leaf will carry the spoofed IDs");
+        return filtered.toArray(new KeyParameter[0]);
+    }
+
+    private static boolean isAttestationIdTag(int tag) {
+        switch (tag) {
+            case Tag.ATTESTATION_ID_BRAND:
+            case Tag.ATTESTATION_ID_DEVICE:
+            case Tag.ATTESTATION_ID_PRODUCT:
+            case Tag.ATTESTATION_ID_SERIAL:
+            case Tag.ATTESTATION_ID_IMEI:
+            case Tag.ATTESTATION_ID_MEID:
+            case Tag.ATTESTATION_ID_MANUFACTURER:
+            case Tag.ATTESTATION_ID_MODEL:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     private static boolean hasAttestationChallenge(KeyParameter[] args) {
         if (args == null) return false;
         for (KeyParameter parameter : args) {

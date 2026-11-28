@@ -146,14 +146,24 @@ public class KeyStoreSecurityLevel {
             Collection<KeyParameter> args, int flags, byte[] entropy)
             throws KeyStoreException {
         final KeyParameter[] keyParameters = args.toArray(new KeyParameter[args.size()]);
+        // Keymaster on some devices rejects ATTESTATION_ID_* (-66 CANNOT_ATTEST_IDS).
+        // Generate the real TEE key without them; the keybox leaf hack adds the
+        // spoofed identity back to the certificate. Keep the original args for the hack.
+        final KeyParameter[] requestParameters = attestationKey == null
+                ? KeyboxImitationHooks.withoutAttestationIds(keyParameters)
+                : keyParameters;
         KeyboxUtils.remove(android.os.Process.myUid(), descriptor.alias);
         try {
             // Always create the real key first. The old cert-generation-only path
             // returned a chain for a key that did not exist in the TEE, so every
             // signature operation against it failed.
             KeyMetadata metadata = handleExceptions(() -> mSecurityLevel.generateKey(
-                    descriptor, attestationKey, keyParameters, flags, entropy));
+                    descriptor, attestationKey, requestParameters, flags, entropy));
             if (attestationKey == null) {
+                if (requestParameters != keyParameters) {
+                    Log.i(TAG, "Real key generation for " + descriptor.alias
+                            + " succeeded without device-ID attestation parameters");
+                }
                 return KeyboxImitationHooks.onGenerateKey(descriptor, metadata, keyParameters);
             }
             return metadata;
