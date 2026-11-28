@@ -72,7 +72,7 @@ class PulsingGestureListener @Inject constructor(
     private val quickQsOffsetHeight: Int
 
     init {
-        val tunable = Tunable { key: String?, _: String? ->
+        val tunable = Tunable { key: String?, value: String? ->
             when (key) {
                 Settings.Secure.DOZE_DOUBLE_TAP_GESTURE ->
                     doubleTapEnabled = ambientDisplayConfiguration.doubleTapGestureEnabled(
