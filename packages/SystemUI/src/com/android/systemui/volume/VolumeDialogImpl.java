@@ -58,6 +58,7 @@ import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
+import android.database.ContentObserver;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.PixelFormat;
@@ -318,6 +319,8 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
     // Volume panel placement left or right
     private boolean mVolumePanelOnLeft;
 
+    private ContentObserver mVolumePanelOnLeftObserver;
+
     // Volume panel expand state
     private boolean mExpanded;
 
@@ -462,6 +465,16 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
     public void init(int windowType, Callback callback) {
         initDialog(mActivityManager.getLockTaskModeState());
 
+        mVolumePanelOnLeftObserver = new ContentObserver(mHandler) {
+            @Override
+            public void onChange(boolean selfChange) {
+                updateVolumePanelOnLeft();
+            }
+        };
+        mContext.getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.VOLUME_PANEL_ON_LEFT),
+                false, mVolumePanelOnLeftObserver);
+
         mAccessibility.init();
 
         mController.addCallback(mControllerCallbackH, mHandler);
@@ -476,6 +489,11 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
     @Override
     public void destroy() {
         mController.removeCallback(mControllerCallbackH);
+        if (mVolumePanelOnLeftObserver != null) {
+            mContext.getContentResolver().unregisterContentObserver(
+                    mVolumePanelOnLeftObserver);
+            mVolumePanelOnLeftObserver = null;
+        }
         mHandler.removeCallbacksAndMessages(null);
         mConfigurationController.removeCallback(this);
         mDeviceConfigProxy.removeOnPropertiesChangedListener(this::onDeviceConfigChange);
@@ -1813,6 +1831,20 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
     private boolean showActiveStreamOnly() {
         return mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)
                 || mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEVISION);
+    }
+
+    /**
+     * The volume panel side is a System setting; rebuild the dialog on the new side instead
+     * of requiring a SystemUI restart.
+     */
+    private void updateVolumePanelOnLeft() {
+        final boolean onLeft = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.VOLUME_PANEL_ON_LEFT,
+                mContext.getResources().getBoolean(R.bool.config_audioPanelOnLeftSide) ? 1 : 0,
+                UserHandle.USER_CURRENT) != 0;
+        if (onLeft == mVolumePanelOnLeft) return;
+        mVolumePanelOnLeft = onLeft;
+        mControllerCallbackH.onConfigurationChanged();
     }
 
     private boolean isExpandableRowH(VolumeRow row) {
