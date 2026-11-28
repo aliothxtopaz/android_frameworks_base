@@ -28,6 +28,8 @@ import com.android.internal.org.bouncycastle.asn1.x9.X9ObjectIdentifiers;
 import com.android.internal.org.bouncycastle.cert.X509CertificateHolder;
 import com.android.internal.org.bouncycastle.operator.ContentSigner;
 import com.android.internal.org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import com.android.internal.util.PropImitationHooks;
+import com.android.internal.util.android.PropsHooksUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -55,7 +57,18 @@ public class KeyboxUtils {
 
     private static final String TAG = "KeyboxUtils";
 
-    private static final ConcurrentHashMap<Key, KeyEntryResponse> response = new ConcurrentHashMap<>();
+    // Fallback responses are only produced when the real key generation failed.
+    // Keep the map bounded so a long-lived process cannot accumulate aliases forever.
+    private static final int MAX_FALLBACK_RESPONSES = 64;
+    private static final ConcurrentHashMap<Key, KeyEntryResponse> response =
+            new ConcurrentHashMap<>();
+
+    // Aliases whose chain is already signed by the active keybox. Checking this
+    // avoids re-parsing the certificate chain on every getKeyEntry().
+    private static final int MAX_KEYBOX_SIGNED_ALIASES = 256;
+    // Provider identity is stored so a keybox change invalidates the cached state.
+    private static final ConcurrentHashMap<Key, IKeyboxProvider> sKeyboxSignedAliases =
+            new ConcurrentHashMap<>();
 
     // Parsing the keybox PEM chain involves a private-key decode and a signature
     // round-trip per certificate, so cache the result for the provider instance.
@@ -191,6 +204,10 @@ public class KeyboxUtils {
             synchronized (sKeyboxLock) {
                 if (provider != sCachedKeyboxProvider) {
                     sKeyboxSlots.clear();
+                    sKeyboxSignedAliases.clear();
+                    if (!provider.hasKeybox()) {
+                        response.clear();
+                    }
                     sCachedKeyboxProvider = provider;
                 }
             }
@@ -418,14 +435,54 @@ public class KeyboxUtils {
     }
 
     public static void append(int uid, String a, KeyEntryResponse c) {
+        if (response.size() >= MAX_FALLBACK_RESPONSES) {
+            // Fallback keys are rare; dropping the cache is cheaper than tracking
+            // insertion order and the only cost is redoing the fallback response.
+            response.clear();
+        }
         response.put(new Key(uid, a), c);
     }
 
     public static void remove(int uid, String a) {
-        response.remove(new Key(uid, a));
+        Key key = new Key(uid, a);
+        response.remove(key);
+        sKeyboxSignedAliases.remove(key);
     }
 
     public static KeyEntryResponse retrieve(int uid, String a) {
         return response.get(new Key(uid, a));
+    }
+
+    public static boolean isKeyboxSigned(int uid, String alias) {
+        try {
+            return sKeyboxSignedAliases.get(new Key(uid, alias))
+                    == KeyProviderManager.getProvider();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public static void markKeyboxSigned(int uid, String alias) {
+        try {
+            if (sKeyboxSignedAliases.size() >= MAX_KEYBOX_SIGNED_ALIASES) {
+                sKeyboxSignedAliases.clear();
+            }
+            sKeyboxSignedAliases.put(new Key(uid, alias), KeyProviderManager.getProvider());
+        } catch (Exception e) {
+            // Caching is best effort.
+        }
+    }
+
+    /**
+     * Attestation ID overrides only make sense when this process is actually being
+     * spoofed (GMS or a PIF target), not for every app that uses the keybox.
+     */
+    public static boolean shouldSpoofAttestationIds() {
+        try {
+            return PropsHooksUtils.isSpoofedProcess()
+                    || PropImitationHooks.isSpoofingGms();
+        } catch (Throwable t) {
+            return false;
+        }
     }
 }

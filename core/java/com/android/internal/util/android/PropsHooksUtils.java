@@ -60,6 +60,10 @@ public class PropsHooksUtils {
 
     private static volatile boolean sIsPhotos;
 
+    // Set when this process' Build fields are actually being spoofed; used to decide
+    // whether keybox attestation IDs should follow the spoofed profile.
+    private static volatile boolean sSpoofedProcess;
+
     private static final Map<String, Object> propsPixelXL = new ArrayMap<>();
     private static final Map<String, Object> propsBS4 = createMap("2SM-X706B", "blackshark");
     private static final Map<String, Object> propsMI11TP = createMap("2107113SI", "Xiaomi");
@@ -209,43 +213,59 @@ public class PropsHooksUtils {
             if (propsToApply != null) packagePropsMap.put(packageName, propsToApply);
         }
 
+        boolean spoofed = false;
         if (shouldSpoofGames()) {
             Map<String, Object> props = packagePropsMap.get(packageName);
             if (props != null) {
                 for (Map.Entry<String, Object> prop : props.entrySet()) {
                     setPropValue(packageName, prop.getKey(), prop.getValue());
                 }
+                spoofed = true;
             }
         }
 
-        applyPerAppProps(packageName);
+        spoofed |= applyPerAppProps(packageName);
 
         sIsPhotos = packageName.equals(PACKAGE_PHOTOS);
         if (shouldSpoofPhotos()) {
             for (Map.Entry<String, Object> entry : propsPixelXL.entrySet()) {
                 setPropValue(packageName, entry.getKey(), entry.getValue());
             }
+            spoofed = true;
         }
 
         if (packageName.equals(PACKAGE_INTELLIGENCE)) {
             setPropValue(packageName, "FINGERPRINT", "eng.nobody." +
                     new SimpleDateFormat("yyyyMMdd.HHmmss").format(new Date()));
+            spoofed = true;
         }
 
         if (shouldSpoofGMS(packageName, processName)) {
             spoofBuildGms(packageName);
+            spoofed = true;
+        }
+
+        if (spoofed) {
+            sSpoofedProcess = true;
         }
     }
 
+    public static boolean isSpoofedProcess() {
+        return sSpoofedProcess;
+    }
+
     /** Applies props written by the per-app spoofing JSON loader in Settings. */
-    private static void applyPerAppProps(String packageName) {
+    private static boolean applyPerAppProps(String packageName) {
+        boolean applied = false;
         String prefix = PER_APP_PREFIX + packageName + ".";
         for (String key : PIHOOK_KEYS) {
             String value = SystemProperties.get(prefix + key, null);
             if (!TextUtils.isEmpty(value)) {
                 setPropValue(packageName, key, value);
+                applied = true;
             }
         }
+        return applied;
     }
 
     private static void setPropValue(String packageName, String key, Object newValue) {

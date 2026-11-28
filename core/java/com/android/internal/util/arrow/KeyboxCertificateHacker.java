@@ -39,6 +39,7 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -268,6 +269,21 @@ public final class KeyboxCertificateHacker {
         return new AuthorityKeyIdentifier(issuerKeyId);
     }
 
+    /** True when the chain is already signed by the active keybox slot. */
+    public static boolean isKeyboxSigned(Certificate[] chain) {
+        if (chain == null || chain.length == 0 || !(chain[0] instanceof X509Certificate)) {
+            return false;
+        }
+        try {
+            X509Certificate leaf = (X509Certificate) chain[0];
+            KeyboxUtils.Keybox keybox = KeyboxUtils.getSigningKeybox(
+                    leaf.getPublicKey().getAlgorithm());
+            return keybox != null && isSignedByKeybox(chain, leaf, keybox);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private static boolean isSignedByKeybox(Certificate[] chain, X509Certificate leaf,
             KeyboxUtils.Keybox keybox) {
         List<Certificate> certificates = keybox.certificates;
@@ -291,6 +307,9 @@ public final class KeyboxCertificateHacker {
     }
 
     private static Map<Integer, byte[]> getAttestationIdOverrides() {
+        if (!KeyboxUtils.shouldSpoofAttestationIds()) {
+            return Collections.emptyMap();
+        }
         Map<Integer, byte[]> overrides = new HashMap<>();
         putIfPresent(overrides, TAG_ATTESTATION_ID_BRAND,
                 KeyboxChainGenerator.getProfileValue("BRAND"));

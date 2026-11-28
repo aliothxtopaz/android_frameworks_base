@@ -400,6 +400,10 @@ public class PropImitationHooks {
                 .anyMatch(elem -> elem.getClassName().contains("DroidGuard"));
     }
 
+    public static boolean isSpoofingGms() {
+        return sIsGms || sIsFinsky;
+    }
+
     public static void onEngineGetCertificateChain() {
         // Attestation is spoofed by KeyboxImitationHooks; do not block it here or
         // Play Integrity never sees the spoofed chain.

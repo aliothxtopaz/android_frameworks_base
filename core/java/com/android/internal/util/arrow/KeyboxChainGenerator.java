@@ -341,6 +341,9 @@ public final class KeyboxChainGenerator {
     }
 
     private static byte[] idValue(byte[] requested, String key) {
+        if (!KeyboxUtils.shouldSpoofAttestationIds()) {
+            return requested;
+        }
         String value = profileValue(key);
         return value == null ? requested : value.getBytes(StandardCharsets.UTF_8);
     }

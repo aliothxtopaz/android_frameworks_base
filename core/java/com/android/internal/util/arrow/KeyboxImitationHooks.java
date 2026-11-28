@@ -79,11 +79,20 @@ public class KeyboxImitationHooks {
         if (response.metadata.certificate == null) {
             return response;
         }
+        if (KeyboxUtils.isKeyboxSigned(uid, descriptor.alias)) {
+            dlog("chain for " + descriptor.alias + " already keybox-signed (cached)");
+            return response;
+        }
 
         sInHack.set(true);
         try {
             Certificate[] chain = KeyboxUtils.getCertificateChain(response.metadata);
             if (chain.length == 0) return response;
+            if (KeyboxCertificateHacker.isKeyboxSigned(chain)) {
+                KeyboxUtils.markKeyboxSigned(uid, descriptor.alias);
+                dlog("chain for " + descriptor.alias + " already keybox-signed");
+                return response;
+            }
 
             Certificate[] hacked = KeyboxCertificateHacker.hackCertificateChain(
                     descriptor.alias, chain);
@@ -95,6 +104,9 @@ public class KeyboxImitationHooks {
             KeyboxUtils.putCertificateChain(response.metadata, hacked);
             boolean persisted = KeyboxUtils.persistCertificateChain(
                     metadataKey(descriptor, response.metadata), hacked);
+            if (persisted) {
+                KeyboxUtils.markKeyboxSigned(uid, descriptor.alias);
+            }
             Log.i(TAG, "leaf-hacked chain for " + descriptor.alias
                     + " uid=" + uid
                     + " certs=" + hacked.length
@@ -145,6 +157,9 @@ public class KeyboxImitationHooks {
             KeyboxUtils.putCertificateChain(metadata, hacked);
             boolean persisted = KeyboxUtils.persistCertificateChain(
                     metadataKey(descriptor, metadata), hacked);
+            if (persisted) {
+                KeyboxUtils.markKeyboxSigned(uid, descriptor.alias);
+            }
             Log.i(TAG, "leaf-hacked chain for " + descriptor.alias
                     + " uid=" + uid
                     + " source=generateKey"
