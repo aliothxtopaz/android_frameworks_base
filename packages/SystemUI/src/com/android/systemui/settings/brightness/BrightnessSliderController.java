@@ -20,6 +20,7 @@ import android.content.Context;
 import android.os.AsyncTask;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -34,6 +35,7 @@ import com.android.systemui.Gefingerpoken;
 import com.android.systemui.R;
 import com.android.systemui.classifier.Classifier;
 import com.android.systemui.plugins.FalsingManager;
+import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.policy.BrightnessMirrorController;
 import com.android.systemui.util.ViewController;
 
@@ -55,9 +57,9 @@ public class BrightnessSliderController extends ViewController<BrightnessSliderV
     private ToggleSlider mMirror;
     private BrightnessMirrorController mMirrorController;
     private boolean mTracking;
+    private boolean mHapticBrightness;
+    private int mLastHapticBucket = -1;
     private final FalsingManager mFalsingManager;
-
-    private Context mContext;
 
     private final Gefingerpoken mOnInterceptListener = new Gefingerpoken() {
         @Override
@@ -91,14 +93,24 @@ public class BrightnessSliderController extends ViewController<BrightnessSliderV
     }
 
 
-    private void triggerVibration(Context context, boolean tracking) {
-    	Vibrator vibrator = context.getSystemService(Vibrator.class);
-        if (vibrator == null || !tracking) {
+    private void triggerBrightnessHaptic(int progress) {
+        if (!mHapticBrightness) {
             return;
         }
-        AsyncTask.execute(
-                    () -> vibrator.vibrate(VibrationEffect.get(VibrationEffect.EFFECT_TEXTURE_TICK)));
-
+        // One tick per 5% step so dragging doesn't spam the vibrator.
+        final int bucket = mView.getMax() > 0
+                ? (int) (progress * 20L / mView.getMax()) : 0;
+        if (bucket == mLastHapticBucket) {
+            return;
+        }
+        mLastHapticBucket = bucket;
+        Vibrator vibrator = mView.getContext().getSystemService(Vibrator.class);
+        if (vibrator == null) {
+            return;
+        }
+        AsyncTask.execute(() -> vibrator.vibrate(
+                VibrationEffect.get(VibrationEffect.EFFECT_TICK),
+                VibratorHelper.TOUCH_VIBRATION_ATTRIBUTES));
     }
 
     @Override
@@ -235,13 +247,17 @@ public class BrightnessSliderController extends ViewController<BrightnessSliderV
             if (mListener != null) {
                 mListener.onChanged(mTracking, progress, false);
             }
-            mContext = mView.getContext();
-            triggerVibration(mContext, mTracking);
+            if (mTracking) {
+                triggerBrightnessHaptic(progress);
+            }
         }
 
         @Override
         public void onStartTrackingTouch(SeekBar seekBar) {
             mTracking = true;
+            mHapticBrightness = Settings.System.getInt(mView.getContext().getContentResolver(),
+                    Settings.System.HAPTIC_BRIGHTNESS, 0) != 0;
+            mLastHapticBucket = -1;
 
             if (mListener != null) {
                 mListener.onChanged(mTracking, getValue(), false);
@@ -251,9 +267,8 @@ public class BrightnessSliderController extends ViewController<BrightnessSliderV
                 mMirrorController.showMirror();
                 mMirrorController.setLocationAndSize(mView);
             }
-            
-            mContext = mView.getContext();
-            triggerVibration(mContext, mTracking);
+
+            triggerBrightnessHaptic(getValue());
         }
 
         @Override

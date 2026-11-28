@@ -90,6 +90,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
+import android.util.SparseIntArray;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -136,6 +137,7 @@ import com.android.systemui.plugins.VolumeDialog;
 import com.android.systemui.plugins.VolumeDialogController;
 import com.android.systemui.plugins.VolumeDialogController.State;
 import com.android.systemui.plugins.VolumeDialogController.StreamState;
+import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.phone.ExpandableIndicator;
 import com.android.systemui.statusbar.policy.AccessibilityManagerWrapper;
 import com.android.systemui.statusbar.policy.ConfigurationController;
@@ -288,6 +290,7 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
     private boolean mAutomute = VolumePrefs.DEFAULT_ENABLE_AUTOMUTE;
     private boolean mSilentMode = VolumePrefs.DEFAULT_ENABLE_SILENT_MODE;
     private State mState;
+    private final SparseIntArray mHapticVolumeLevels = new SparseIntArray();
     private SafetyWarningDialog mSafetyWarning;
     private boolean mHovering = false;
     private final boolean mShowActiveStreamOnly;
@@ -2160,6 +2163,20 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
         }
         mState = state;
         mDynamic.clear();
+        if (state != null) {
+            for (int i = 0; i < state.states.size(); i++) {
+                final int stream = state.states.keyAt(i);
+                final StreamState ss = state.states.valueAt(i);
+                final int previousLevel = mHapticVolumeLevels.get(stream, -1);
+                if (previousLevel != -1 && previousLevel != ss.level
+                        && stream == state.activeStream
+                        && Settings.System.getInt(mContext.getContentResolver(),
+                                Settings.System.HAPTIC_VOLUME, 0) != 0) {
+                    Dependency.get(VibratorHelper.class).vibrate(VibrationEffect.EFFECT_TICK);
+                }
+                mHapticVolumeLevels.put(stream, ss.level);
+            }
+        }
         // add any new dynamic rows
         for (int i = 0; i < state.states.size(); i++) {
             final int stream = state.states.keyAt(i);

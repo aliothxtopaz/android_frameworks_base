@@ -5806,6 +5806,24 @@ public final class Settings {
          */
         public static final String VOLUME_PANEL_ON_LEFT = "volume_panel_on_left";
 
+        /**
+         * Vibrate briefly when the notification shade / Quick Settings is pulled down
+         * @hide
+         */
+        public static final String HAPTIC_QS_PULLDOWN = "haptic_qs_pulldown";
+
+        /**
+         * Vibrate briefly when the volume is changed
+         * @hide
+         */
+        public static final String HAPTIC_VOLUME = "haptic_volume";
+
+        /**
+         * Vibrate briefly when the brightness slider is moved
+         * @hide
+         */
+        public static final String HAPTIC_BRIGHTNESS = "haptic_brightness";
+
 
         /**
          * Keys we no longer back up under the current schema, but want to continue to

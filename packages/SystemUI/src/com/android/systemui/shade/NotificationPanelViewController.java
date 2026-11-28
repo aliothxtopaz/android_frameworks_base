@@ -348,6 +348,7 @@ public final class NotificationPanelViewController implements Dumpable {
     private final TapAgainViewController mTapAgainViewController;
     private final ShadeHeaderController mShadeHeaderController;
     private final boolean mVibrateOnOpening;
+    private boolean mHapticQsPulldown;
     private final VelocityTracker mVelocityTracker = VelocityTracker.obtain();
     private final FlingAnimationUtils mFlingAnimationUtilsClosing;
     private final FlingAnimationUtils mFlingAnimationUtilsDismissing;
@@ -826,6 +827,17 @@ public final class NotificationPanelViewController implements Dumpable {
                 R.bool.config_enableNotificationShadeDrag);
         mVibratorHelper = vibratorHelper;
         mVibrateOnOpening = mResources.getBoolean(R.bool.config_vibrateOnIconAnimation);
+        final ContentResolver hapticResolver = mView.getContext().getContentResolver();
+        mHapticQsPulldown = Settings.System.getInt(hapticResolver,
+                Settings.System.HAPTIC_QS_PULLDOWN, 0) != 0;
+        hapticResolver.registerContentObserver(Settings.System.getUriFor(
+                Settings.System.HAPTIC_QS_PULLDOWN), false, new ContentObserver(handler) {
+            @Override
+            public void onChange(boolean selfChange) {
+                mHapticQsPulldown = Settings.System.getInt(hapticResolver,
+                        Settings.System.HAPTIC_QS_PULLDOWN, 0) != 0;
+            }
+        });
         mStatusBarTouchableRegionManager = statusBarTouchableRegionManager;
         mSystemClock = systemClock;
         mKeyguardMediaController = keyguardMediaController;
@@ -3552,7 +3564,7 @@ public final class NotificationPanelViewController implements Dumpable {
      *                         gesture), we always play haptic.
      */
     private void maybeVibrateOnOpening(boolean openingWithTouch) {
-        if (mVibrateOnOpening) {
+        if (mVibrateOnOpening || mHapticQsPulldown) {
             if (!openingWithTouch || !mHasVibratedOnOpen) {
                 mVibratorHelper.vibrate(VibrationEffect.EFFECT_TICK);
                 mHasVibratedOnOpen = true;
