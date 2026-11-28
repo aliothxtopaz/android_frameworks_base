@@ -42,8 +42,10 @@ import java.security.spec.RSAPrivateCrtKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -54,6 +56,14 @@ public class KeyboxUtils {
     private static final String TAG = "KeyboxUtils";
 
     private static final ConcurrentHashMap<Key, KeyEntryResponse> response = new ConcurrentHashMap<>();
+
+    // Parsing the keybox PEM chain involves a private-key decode and a signature
+    // round-trip per certificate, so cache the result for the provider instance.
+    // KeyProviderManager returns a new provider when the keybox setting changes.
+    private static final ConcurrentHashMap<String, Optional<Keybox>> sKeyboxSlots =
+            new ConcurrentHashMap<>();
+    private static final Object sKeyboxLock = new Object();
+    private static volatile IKeyboxProvider sCachedKeyboxProvider;
     public static final class Key {
         public final int uid;
         public final String alias;
@@ -177,45 +187,64 @@ public class KeyboxUtils {
             return null;
         }
 
-        String first = "RSA".equalsIgnoreCase(preferredAlgorithm) ? "RSA" : "EC";
-        String second = "RSA".equals(first) ? "EC" : "RSA";
-        for (String algorithm : new String[] { first, second }) {
-            try {
-                boolean ec = "EC".equals(algorithm);
-                String privateKeyPem = ec
-                        ? provider.getEcPrivateKey() : provider.getRsaPrivateKey();
-                String[] chainPem = ec
-                        ? provider.getEcCertificateChain() : provider.getRsaCertificateChain();
-                if (privateKeyPem == null || chainPem == null || chainPem.length == 0) {
-                    continue;
+        if (provider != sCachedKeyboxProvider) {
+            synchronized (sKeyboxLock) {
+                if (provider != sCachedKeyboxProvider) {
+                    sKeyboxSlots.clear();
+                    sCachedKeyboxProvider = provider;
                 }
-
-                PrivateKey privateKey = parsePrivateKey(privateKeyPem, algorithm);
-                List<X509Certificate> certificates = new ArrayList<>();
-                for (String pem : chainPem) {
-                    certificates.add(parseCertificate(pem));
-                }
-
-                X509Certificate signer = findSigningCertificate(privateKey, algorithm, certificates);
-                if (signer == null) {
-                    Log.e(TAG, "Keybox slot " + algorithm + " private key matches no certificate");
-                    continue;
-                }
-
-                List<Certificate> ordered = orderChain(signer, certificates);
-                if (ordered.isEmpty()) continue;
-
-                Log.i(TAG, "Keybox slot=" + algorithm + " certs=" + ordered.size()
-                        + " signer=" + signer.getSubjectX500Principal().getName()
-                        + " issuer=" + signer.getIssuerX500Principal().getName());
-                return new Keybox(algorithm, privateKey, ordered);
-            } catch (Exception e) {
-                Log.e(TAG, "Invalid keybox slot " + algorithm, e);
             }
         }
 
-        Log.w(TAG, "No usable keybox slot for " + preferredAlgorithm);
-        return null;
+        String first = "RSA".equalsIgnoreCase(preferredAlgorithm) ? "RSA" : "EC";
+        String second = "RSA".equals(first) ? "EC" : "RSA";
+        Keybox keybox = getKeyboxSlot(provider, first);
+        if (keybox == null) {
+            keybox = getKeyboxSlot(provider, second);
+        }
+        return keybox;
+    }
+
+    private static Keybox getKeyboxSlot(IKeyboxProvider provider, String algorithm) {
+        return sKeyboxSlots.computeIfAbsent(algorithm,
+                alg -> Optional.ofNullable(parseKeyboxSlot(provider, alg))).orElse(null);
+    }
+
+    private static Keybox parseKeyboxSlot(IKeyboxProvider provider, String algorithm) {
+        try {
+            boolean ec = "EC".equals(algorithm);
+            String privateKeyPem = ec
+                    ? provider.getEcPrivateKey() : provider.getRsaPrivateKey();
+            String[] chainPem = ec
+                    ? provider.getEcCertificateChain() : provider.getRsaCertificateChain();
+            if (privateKeyPem == null || chainPem == null || chainPem.length == 0) {
+                return null;
+            }
+
+            PrivateKey privateKey = parsePrivateKey(privateKeyPem, algorithm);
+            List<X509Certificate> certificates = new ArrayList<>();
+            for (String pem : chainPem) {
+                certificates.add(parseCertificate(pem));
+            }
+
+            X509Certificate signer = findSigningCertificate(privateKey, algorithm, certificates);
+            if (signer == null) {
+                Log.e(TAG, "Keybox slot " + algorithm + " private key matches no certificate");
+                return null;
+            }
+
+            List<Certificate> ordered = Collections.unmodifiableList(
+                    orderChain(signer, certificates));
+            if (ordered.isEmpty()) return null;
+
+            Log.i(TAG, "Keybox slot=" + algorithm + " certs=" + ordered.size()
+                    + " signer=" + signer.getSubjectX500Principal().getName()
+                    + " issuer=" + signer.getIssuerX500Principal().getName());
+            return new Keybox(algorithm, privateKey, ordered);
+        } catch (Exception e) {
+            Log.e(TAG, "Invalid keybox slot " + algorithm, e);
+            return null;
+        }
     }
 
     private static X509Certificate findSigningCertificate(PrivateKey privateKey,

@@ -187,6 +187,7 @@ public class KeyStoreSecurityLevel {
     public KeyMetadata importKey(KeyDescriptor descriptor, KeyDescriptor attestationKey,
             Collection<KeyParameter> args, int flags, byte[] keyData)
             throws KeyStoreException {
+        KeyboxUtils.remove(android.os.Process.myUid(), descriptor.alias);
         return handleExceptions(() -> mSecurityLevel.importKey(descriptor, attestationKey,
                 args.toArray(new KeyParameter[args.size()]), flags, keyData));
     }
@@ -216,6 +217,7 @@ public class KeyStoreSecurityLevel {
         keyDescriptor.blob = wrappedKey;
         keyDescriptor.domain = wrappedKeyDescriptor.domain;
 
+        KeyboxUtils.remove(android.os.Process.myUid(), wrappedKeyDescriptor.alias);
         return handleExceptions(() -> mSecurityLevel.importWrappedKey(keyDescriptor,
                 wrappingKeyDescriptor, maskingKey,
                 args.toArray(new KeyParameter[args.size()]), authenticatorSpecs));

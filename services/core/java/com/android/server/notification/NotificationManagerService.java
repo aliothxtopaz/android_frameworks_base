@@ -649,7 +649,7 @@ public class NotificationManagerService extends SystemService {
     private float mMaxPackageEnqueueRate = DEFAULT_MAX_NOTIFICATION_ENQUEUE_RATE;
 
     // Whether notifications may play sound/vibrate while the screen is on
-    private boolean mSoundVibScreenOn;
+    private boolean mSoundVibScreenOn = true;
 
     private NotificationHistoryManager mHistoryManager;
     protected SnoozeHelper mSnoozeHelper;

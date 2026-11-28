@@ -17,9 +17,7 @@
 package com.android.systemui.settings.brightness;
 
 import android.content.Context;
-import android.os.AsyncTask;
 import android.os.VibrationEffect;
-import android.os.Vibrator;
 import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -31,6 +29,7 @@ import android.widget.SeekBar;
 import androidx.annotation.Nullable;
 
 import com.android.settingslib.RestrictedLockUtils;
+import com.android.systemui.Dependency;
 import com.android.systemui.Gefingerpoken;
 import com.android.systemui.R;
 import com.android.systemui.classifier.Classifier;
@@ -104,13 +103,7 @@ public class BrightnessSliderController extends ViewController<BrightnessSliderV
             return;
         }
         mLastHapticBucket = bucket;
-        Vibrator vibrator = mView.getContext().getSystemService(Vibrator.class);
-        if (vibrator == null) {
-            return;
-        }
-        AsyncTask.execute(() -> vibrator.vibrate(
-                VibrationEffect.get(VibrationEffect.EFFECT_TICK),
-                VibratorHelper.TOUCH_VIBRATION_ATTRIBUTES));
+        Dependency.get(VibratorHelper.class).vibrate(VibrationEffect.EFFECT_TICK);
     }
 
     @Override
@@ -255,8 +248,10 @@ public class BrightnessSliderController extends ViewController<BrightnessSliderV
         @Override
         public void onStartTrackingTouch(SeekBar seekBar) {
             mTracking = true;
-            mHapticBrightness = Settings.System.getInt(mView.getContext().getContentResolver(),
-                    Settings.System.HAPTIC_BRIGHTNESS, 0) != 0;
+            final Context context = mView.getContext();
+            mHapticBrightness = context != null
+                    && Settings.System.getInt(context.getContentResolver(),
+                            Settings.System.HAPTIC_BRIGHTNESS, 0) != 0;
             mLastHapticBucket = -1;
 
             if (mListener != null) {

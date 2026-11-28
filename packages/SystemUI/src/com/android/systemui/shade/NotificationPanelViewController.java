@@ -64,7 +64,6 @@ import android.graphics.Rect;
 import android.graphics.Region;
 import android.hardware.biometrics.SensorLocationInternal;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.PowerManager;
@@ -507,6 +506,8 @@ public final class NotificationPanelViewController implements Dumpable {
 
     private GestureDetector mDoubleTapGestureListener;
     private boolean mDoubleTapSleepEnabled;
+    private ContentObserver mHapticQsPulldownObserver;
+    private ContentObserver mDoubleTapSleepObserver;
 
     private final KeyguardIndicationController mKeyguardIndicationController;
     private int mHeadsUpInset;
@@ -830,14 +831,13 @@ public final class NotificationPanelViewController implements Dumpable {
         final ContentResolver hapticResolver = mView.getContext().getContentResolver();
         mHapticQsPulldown = Settings.System.getInt(hapticResolver,
                 Settings.System.HAPTIC_QS_PULLDOWN, 0) != 0;
-        hapticResolver.registerContentObserver(Settings.System.getUriFor(
-                Settings.System.HAPTIC_QS_PULLDOWN), false, new ContentObserver(handler) {
+        mHapticQsPulldownObserver = new ContentObserver(handler) {
             @Override
             public void onChange(boolean selfChange) {
                 mHapticQsPulldown = Settings.System.getInt(hapticResolver,
                         Settings.System.HAPTIC_QS_PULLDOWN, 0) != 0;
             }
-        });
+        };
         mStatusBarTouchableRegionManager = statusBarTouchableRegionManager;
         mSystemClock = systemClock;
         mKeyguardMediaController = keyguardMediaController;
@@ -915,18 +915,15 @@ public final class NotificationPanelViewController implements Dumpable {
             }
         });
         final ContentResolver doubleTapResolver = mView.getContext().getContentResolver();
-        final Uri doubleTapSleepUri = Settings.System.getUriFor(
-                Settings.System.DOUBLE_TAP_SLEEP_GESTURE);
         mDoubleTapSleepEnabled = Settings.System.getInt(doubleTapResolver,
                 Settings.System.DOUBLE_TAP_SLEEP_GESTURE, 1) != 0;
-        doubleTapResolver.registerContentObserver(doubleTapSleepUri, false,
-                new ContentObserver(handler) {
+        mDoubleTapSleepObserver = new ContentObserver(handler) {
             @Override
             public void onChange(boolean selfChange) {
                 mDoubleTapSleepEnabled = Settings.System.getInt(doubleTapResolver,
                         Settings.System.DOUBLE_TAP_SLEEP_GESTURE, 1) != 0;
             }
-        });
+        };
         mConversationNotificationManager = conversationNotificationManager;
         mAuthController = authController;
         mLockIconViewController = lockIconViewController;
@@ -4537,11 +4534,22 @@ public final class NotificationPanelViewController implements Dumpable {
             mFalsingManager.addTapListener(mFalsingTapListener);
             mKeyguardIndicationController.init();
             registerSettingsChangeListener();
+            mHapticQsPulldown = Settings.System.getInt(mContentResolver,
+                    Settings.System.HAPTIC_QS_PULLDOWN, 0) != 0;
+            mDoubleTapSleepEnabled = Settings.System.getInt(mContentResolver,
+                    Settings.System.DOUBLE_TAP_SLEEP_GESTURE, 1) != 0;
+            mContentResolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.HAPTIC_QS_PULLDOWN), false, mHapticQsPulldownObserver);
+            mContentResolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.DOUBLE_TAP_SLEEP_GESTURE), false,
+                    mDoubleTapSleepObserver);
         }
 
         @Override
         public void onViewDetachedFromWindow(View v) {
             mContentResolver.unregisterContentObserver(mSettingsChangeObserver);
+            mContentResolver.unregisterContentObserver(mHapticQsPulldownObserver);
+            mContentResolver.unregisterContentObserver(mDoubleTapSleepObserver);
             mFragmentService.getFragmentHostManager(mView)
                     .removeTagListener(QS.TAG, mQsController.getQsFragmentListener());
             mStatusBarStateController.removeCallback(mStatusBarStateListener);
@@ -4867,9 +4875,10 @@ public final class NotificationPanelViewController implements Dumpable {
                 return false;
             }
 
-            if (mDoubleTapSleepEnabled
+            if (mDoubleTapSleepEnabled && !mPulsing && !mDozing
                     && (mBarState == StatusBarState.KEYGUARD
-                    || mBarState == StatusBarState.SHADE)) {
+                    || (!mQsController.getExpanded()
+                    && event.getY() < mStatusBarHeaderHeightKeyguard))) {
                 mDoubleTapGestureListener.onTouchEvent(event);
             }
 

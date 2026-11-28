@@ -319,7 +319,8 @@ public class NotificationConversationInfo extends LinearLayout implements
             dialog.setPositiveButton(android.R.string.ok, (d, which) -> {
                 final ActivityManager am = mContext.getSystemService(ActivityManager.class);
                 if (am != null) {
-                    am.forceStopPackage(mPackageName);
+                    am.forceStopPackageAsUser(mPackageName,
+                            mSbn.getUser().getIdentifier());
                 }
             });
             dialog.setNegativeButton(android.R.string.cancel, null);
